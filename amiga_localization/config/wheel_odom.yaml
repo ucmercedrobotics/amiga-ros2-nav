@@ -1,0 +1,9 @@
+wheel_odometry_node:
+  ros__parameters:
+    wheel_params:
+      wheel_radius: 0.21
+      track_width: 1.13
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      theta: 0.0
