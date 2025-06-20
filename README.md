@@ -8,9 +8,9 @@
 
 3. Build and Start the docker container with `make build-prod` and `make bash`
 
-4. Install dependenceis
+4. Install dependencies
 ```bash
-apt update; rosdep install --from-paths . --ignore-src -r -y
+rosdep update; rosdep install --from-paths . --ignore-src -r -y
 ```
 
 5. Run `colcon build`
@@ -48,12 +48,13 @@ ctrl-b +
 
 1. Bringup the ros2_bridge, twist_control, joy, urdf, localization
 ```bash
-foxglove
+make foxglove
 make amiga-streams
 make twist
+make description
+make oakd
+make nav
 make joy
-make urdf
-ros2 launch amiga_localization bringup.launch.py
 ```
 
 imu1.urdf.xacro
