@@ -71,6 +71,14 @@ class WheelOdometryNode(Node):
         self.y += v_sim * math.sin(self.theta) * dt
         self.v = v_sim
         self.omega = omega_sim
+        
+    # Just pass raw v and omega values.
+    def update_raw(self, msg: TwistStamped):
+        v = msg.twist.linear.x
+        omega = msg.twist.angular.z
+        self.v = v
+        self.omega = omega
+        
 
     def create_odom_msg(self) -> Odometry:
         msg = Odometry()
@@ -88,7 +96,8 @@ class WheelOdometryNode(Node):
         return msg
 
     def twist_callback(self, msg: TwistStamped):
-        self.update(msg)
+        # self.update(msg)
+        self.update_raw(msg)
         odom_msg = self.create_odom_msg()
         self.wheel_odom_publisher.publish(odom_msg)
         self.get_logger().debug(

@@ -30,7 +30,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'wheel_odometry_node = amiga_localization.wheel_odom:main'
+            'wheel_odometry_node = amiga_localization.wheel_odom:main',
+            'gps_logger = amiga_localization.gps_logger:main'
         ],
     },
 )
