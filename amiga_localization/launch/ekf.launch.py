@@ -44,8 +44,8 @@ def generate_launch_description():
                     ("gps/fix", "/ublox_gps_node/fix"),
                     ("odometry/filtered", "odometry/filtered/global"),
                     # -- Outputs
-                    ("gps/filtered", "gps/filtered"),
-                    ("odometry/gps", "odometry/gps"),
+                    # ("gps/filtered", "gps/filtered"),
+                    # ("odometry/gps", "odometry/gps"),
                 ],
             ),
         ]
