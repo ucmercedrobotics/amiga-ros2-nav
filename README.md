@@ -1,4 +1,5 @@
 # amiga-ros2-nav
+This describes the current state of Amiga localization using ROS2/Nav2. This pipeline is used with an RTK module similar to what is in the Brain. However, to configure it properly, we use our own hardware and plug it into the available USB in the back of the Brain. This can work without RTK, but right now the configuration requires it. Future work will allow parameters to remove it as a requirement and only use Amiga provided hardware.
 
 ## Installation
 
@@ -6,56 +7,4 @@
 
 2. Run `vcs import < nav.repos` to install the required 3rd party packages
 
-3. Build and Start the docker container with `make build-prod` and `make bash`
-
-4. Install dependencies
-```bash
-rosdep update; rosdep install --from-paths . --ignore-src -r -y
-```
-
-5. Run `colcon build`
-
-## Foxglove
-
-1. Inside the docker container, install the ros2 foxglove node with 
-```bash
-apt install ros-humble-foxglove-bridge
-```
-
-2. Run the foxglove node (Farm-ng uses port `8765` for their foxglove bridge, so use `8766`)
-```bash
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="8766"
-```
-
-3. Follow instructions [here](https://docs.foxglove.dev/docs/connecting-to-data/frameworks/ros2) to open foxglove
-
-## Running
-
-1. TMUX Cheatsheet
-Open tmux: `tmux new -s ros`
-Attach tmux: `tmux attach -t ros`
-Kill tmux: `tmux kill-session -t ros`
-ctrl-b +
-    c : new pane
-    [number] : switch pane
-    n : next window
-    p : previous window
-    w : list windows & select
-    `[` : scroll mode (press q to escape)
-    d : exit tmux
-    x : close pane
-
-
-1. Bringup the ros2_bridge, twist_control, joy, urdf, localization
-```bash
-make foxglove
-make amiga-streams
-make twist
-make description
-make oakd
-make nav
-make joy
-```
-
-imu1.urdf.xacro
-<!-- <origin xyz="-0.26 -0.28 0.77" rpy="3.14159 1.5708 3.14159"/> -->
+3. The remaining steps require the rest of the Amiga ROS2 packages, so see steps in [`amiga-ros2-bridge`](https://github.com/ucmercedrobotics/amiga-ros2-bridge).
