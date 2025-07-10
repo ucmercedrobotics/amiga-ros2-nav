@@ -9,9 +9,11 @@ import utils
 import visualization as viz
 
 """
-ros2 bag record -o bag/ /odometry/filtered/global /odometry/filtered/local /ublox_gps_node/fix
+ros2 bag record -o "bag/rosbag_$(date +%Y%m%d_%H%M%S)" /odometry/filtered/global /odometry/filtered/local /ublox_gps_node/fix
 
 python utils/plot_localization.py <rosbag path> [options]
+
+python amiga-ros2-nav/utils/plot_localization.py  bag/{bag} -o output/{filename}.png -p 1
 """
 
 

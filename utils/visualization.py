@@ -30,6 +30,15 @@ def parse_odom_msg(msg: List[Any]):
     _, _, yaw = utils.euler_from_quaternion(quat.x, quat.y, quat.z, quat.w)
     return (pos.x, pos.y), yaw
 
+def rotate_verts(verts: List[Tuple[float, float]], yaw_offset_rad: float) -> List[Tuple[float, float]]:
+    """For tuning the yaw offset."""
+    cos_yaw = np.cos(yaw_offset_rad)
+    sin_yaw = np.sin(yaw_offset_rad)
+    return [
+        (x * cos_yaw - y * sin_yaw, x * sin_yaw + y * cos_yaw)
+        for x, y in verts
+    ]
+
 def plot_odometry_path(ax: Axes, msgs: List[Any], label: str, plot_every: int = 1):
     assert len(msgs) > 0, "No messages in topic to plot!"
     
@@ -41,6 +50,7 @@ def plot_odometry_path(ax: Axes, msgs: List[Any], label: str, plot_every: int = 
         verts.append(pos)
         angles.append(angle)
     verts = center_with_first(verts)
+    verts = rotate_verts(verts, 0.0)
 
     # -- Plot Path and Orientation
     X, Y = zip(*verts)
