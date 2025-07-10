@@ -1,0 +1,7 @@
+# srv/GpsToWaypoint.srv
+
+float64 latitude
+float64 longitude
+float64 yaw
+---
+geometry_msgs/PoseStamped waypoint
