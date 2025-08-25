@@ -9,10 +9,10 @@
 ekf_local_filter_node:
   ros__parameters:
     frequency: 20.0
-    sensor_timeout: 0.1
+    sensor_timeout: 0.2
     two_d_mode: true
     transform_time_offset: 0.1
-    transform_timeout: 0.1
+    transform_timeout: 0.05
     publish_tf: true
 
     # REP-105 (http://www.ros.org/reps/rep-0105.html)
@@ -36,7 +36,7 @@ ekf_local_filter_node:
     
     
     # -- Oak0 Imu
-    imu0: oak0/imu/data
+    imu0: oak1/imu/data
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
@@ -44,8 +44,8 @@ ekf_local_filter_node:
                   false, false, false]
     imu0_queue_size: 10
     imu0_differential: false
-    imu0_relative: true
-    imu0_nodelay: false
+    imu0_relative: false
+    imu0_nodelay: true
     imu0_pose_rejection_threshold: 10.0     
     imu0_twist_rejection_threshold: 10.0   
     imu0_linear_acceleration_rejection_threshold: 10.0
@@ -74,9 +74,9 @@ ekf_local_filter_node:
 ekf_global_filter_node:
   ros__parameters:
     frequency: 10.0
-    sensor_timeout: 0.1
+    sensor_timeout: 0.2
     two_d_mode: true
-    transform_time_offset: 0.15
+    transform_time_offset: 0.1
     transform_timeout: 0.05
     publish_tf: true
     
@@ -95,8 +95,9 @@ ekf_global_filter_node:
                   false, false, false]
     odom0_queue_size: 10
     odom0_differential: false
-    odom0_relative: false
-    odom0_nodelay: false
+    # odom0_relative: false
+    odom0_relative: true
+    odom0_nodelay: true
 
     # -- Wheel Odometry
     odom1: wheel/odometry
@@ -111,7 +112,7 @@ ekf_global_filter_node:
     odom1_relative: false
     
     # -- Oak0 Imu
-    imu0: oak0/imu/data
+    imu0: oak1/imu/data
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
@@ -119,8 +120,8 @@ ekf_global_filter_node:
                   false, false, false]
     imu0_queue_size: 10
     imu0_differential: false
-    imu0_relative: true
-    imu0_nodelay: false
+    imu0_relative: false
+    imu0_nodelay: true
     imu0_pose_rejection_threshold: 10.0     
     imu0_twist_rejection_threshold: 10.0   
     imu0_linear_acceleration_rejection_threshold: 10.0
@@ -153,7 +154,9 @@ navsat_transform_node:
         # TODO: Verify IMU data 
         use_odometry_yaw: false
         magnetic_declination_radians: 0.2193
-        yaw_offset: -0.25
+        # yaw_offset: -0.25
+        # yaw_offset: -1.02
+        yaw_offset: 1.39
 
         zero_altitude: true
         publish_filtered_gps: true
