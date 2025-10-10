@@ -95,8 +95,7 @@ ekf_global_filter_node:
                   false, false, false]
     odom0_queue_size: 10
     odom0_differential: false
-    # odom0_relative: false
-    odom0_relative: true
+    odom0_relative: false
     odom0_nodelay: true
 
     # -- Wheel Odometry
@@ -126,11 +125,11 @@ ekf_global_filter_node:
     imu0_twist_rejection_threshold: 10.0   
     imu0_linear_acceleration_rejection_threshold: 10.0
     
-    # imu1: oak1/imu/data
+    # imu1: oak0/imu/data
     # imu1_config: [false, false, false,
+    #               false, false, false,
+    #               false, false, false,
     #               false, false, true,
-    #               false, false, false,
-    #               false, false, false,
     #               false, false, false]
     # imu1_queue_size: 10
     # imu1_differential: false
@@ -154,9 +153,7 @@ navsat_transform_node:
         # TODO: Verify IMU data 
         use_odometry_yaw: false
         magnetic_declination_radians: 0.2193
-        # yaw_offset: -0.25
-        # yaw_offset: -1.02
-        yaw_offset: 1.39
+        yaw_offset: 0.0
 
         zero_altitude: true
         publish_filtered_gps: true
