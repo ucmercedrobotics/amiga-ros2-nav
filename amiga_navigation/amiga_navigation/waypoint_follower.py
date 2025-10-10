@@ -49,7 +49,7 @@ class WaypointFollowerActionServer(Node):
         self._action_server_waypoint_follow = ActionServer(
             node=self,
             action_type=Wpfollow,
-            action_name='waypoint_follow',
+            action_name='follow_gps_waypoints',
             execute_callback=self.goto_callback)
 
     def pose_cb(self, msg): # save current location
