@@ -1,6 +1,5 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 
 from sensor_msgs.msg import NavSatFix, Joy
@@ -12,7 +11,6 @@ from tf2_ros import Buffer, TransformListener
 import math
 import yaml
 import os
-import sys
 
 from amiga_ros2_teleop.controller_utils import load_controller_config, ControllerMap, ButtonTrigger
 from amiga_navigation.utils.gps_utils import euler_from_quaternion, apply_yaw_offset, get_yaw_from_tf

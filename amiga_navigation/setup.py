@@ -31,8 +31,6 @@ setup(
     entry_points={
         'console_scripts': [
             'joy_gps_waypoint_logger = amiga_navigation.joy_gps_waypoint_logger:main',
-            'logged_waypoint_follower = amiga_navigation.logged_waypoint_follower:main',
-            'gps_to_waypoint_service = amiga_navigation.gps_to_waypoint:main',
             'waypoint_follower = amiga_navigation.waypoint_follower:main',
         ],
     },
