@@ -11,6 +11,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # Find dependencies
+
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -23,25 +24,44 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(amiga_interfaces REQUIRED)
 
 # Include directories
 include_directories(
   include
 )
 
-add_executable(lidar_object_navigator 
+add_executable(lidar_object_navigator
   src/lidar_object_navigator.cpp
 )
+
 ament_target_dependencies(lidar_object_navigator
   rclcpp
   rclcpp_action
+  amiga_interfaces
   nav2_msgs
   sensor_msgs
   geometry_msgs
 )
 
+add_executable(navigate_to_pose_in_frame
+  src/navigate_to_pose_in_frame.cpp
+)
+
+ament_target_dependencies(navigate_to_pose_in_frame
+  rclcpp
+  rclcpp_action
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  amiga_interfaces
+  nav2_msgs
+  geometry_msgs
+)
+
 install(TARGETS
   lidar_object_navigator
+  navigate_to_pose_in_frame
   DESTINATION lib/${PROJECT_NAME}
 )
 
