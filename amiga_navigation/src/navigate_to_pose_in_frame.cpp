@@ -3,7 +3,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "nav_msgs/msg/odometry.hpp"
 
 #include "amiga_navigation/navigate_to_pose_in_frame.hpp"
 
@@ -17,6 +17,14 @@ NavigateToPoseInFrame::NavigateToPoseInFrame(const rclcpp::NodeOptions & options
 {
   nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
 
+  this->declare_parameter<std::string>("global_frame", "/odometry/filtered/global");
+  std::string global_frame = this->get_parameter("global_frame").as_string();
+
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
+  global_frame_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+    global_frame, qos,
+    std::bind(&NavigateToPoseInFrame::global_frame_callback, this, _1));
+
   action_server_ = rclcpp_action::create_server<NavigateToPoseInFrameAction>(
     this,
     "navigate_to_pose_in_frame",
@@ -24,10 +32,13 @@ NavigateToPoseInFrame::NavigateToPoseInFrame(const rclcpp::NodeOptions & options
     std::bind(&NavigateToPoseInFrame::handle_cancel, this, _1),
     std::bind(&NavigateToPoseInFrame::handle_accepted, this, _1));
 
-  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-
   RCLCPP_INFO(this->get_logger(), "NavigateToPoseInFrame initialized");
+}
+
+void NavigateToPoseInFrame::global_frame_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  // Update the global frame based on the latest odometry message
+  global_frame_pose_ = msg->pose.pose;
 }
 
 rclcpp_action::GoalResponse NavigateToPoseInFrame::handle_goal(
@@ -73,59 +84,20 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
     return;
   }
 
-  geometry_msgs::msg::PoseStamped pose_in_base_link;
-  pose_in_base_link.header.stamp = this->now();
-  pose_in_base_link.header.frame_id = "base_link";
-  pose_in_base_link.pose.position.x = goal->x;
-  pose_in_base_link.pose.position.y = goal->y;
-  pose_in_base_link.pose.position.z = 0.0;
-  // If absolute orientation requested, keep relative yaw 0 here; we'll override later
-  double relative_yaw = goal->absolute ? 0.0 : static_cast<double>(goal->yaw);
-  pose_in_base_link.pose.orientation.x = 0.0;
-  pose_in_base_link.pose.orientation.y = 0.0;
-  pose_in_base_link.pose.orientation.z = std::sin(relative_yaw / 2.0);
-  pose_in_base_link.pose.orientation.w = std::cos(relative_yaw / 2.0);
-
-  // Transform to map so Nav2 gets a consistent frame
   geometry_msgs::msg::PoseStamped pose_in_map;
-  const int max_retries = 10;
-  const auto retry_delay = std::chrono::milliseconds(100);
-
-  bool transformed = false;
-  for (int attempt = 0; attempt < max_retries; ++attempt) {
-    try {
-      pose_in_map = tf_buffer_->transform(
-        pose_in_base_link, "map", tf2::durationFromSec(0.5));
-      transformed = true;
-      RCLCPP_INFO(
-        this->get_logger(),
-        "Transformed pose from base_link (%.2f, %.2f) to map (%.2f, %.2f)",
-        goal->x, goal->y,
-        pose_in_map.pose.position.x, pose_in_map.pose.position.y);
-      break;
-    } catch (const tf2::TransformException & ex) {
-      if (attempt < max_retries - 1) {
-        RCLCPP_WARN(
-          this->get_logger(),
-          "Transform attempt %d/%d failed: %s. Retrying...",
-          attempt + 1, max_retries, ex.what());
-        std::this_thread::sleep_for(retry_delay);
-      } else {
-        RCLCPP_ERROR(
-          this->get_logger(),
-          "Could not transform pose after %d attempts: %s",
-          max_retries, ex.what());
-      }
-    }
-  }
-
-  if (!transformed) {
-    result->success = false;
-    result->message = "TF transform to map failed";
-    goal_handle->abort(result);
-    active_goal_handle_.reset();
-    return;
-  }
+  pose_in_map.header.stamp = this->now();
+  pose_in_map.header.frame_id = "map";
+  pose_in_map.pose.position.x = global_frame_pose_.position.x + goal->x;
+  pose_in_map.pose.position.y = global_frame_pose_.position.y + goal->y;
+  pose_in_map.pose.position.z = 0.0;
+  // If absolute orientation requested, keep relative yaw 0 here; we'll override later
+  double relative_yaw = goal->absolute ? static_cast<double>(goal->yaw) : static_cast<double>(goal->yaw) + 
+    std::atan2(2.0 * (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
+               1.0 - 2.0 * (global_frame_pose_.orientation.z * global_frame_pose_.orientation.z));
+  pose_in_map.pose.orientation.x = 0.0;
+  pose_in_map.pose.orientation.y = 0.0;
+  pose_in_map.pose.orientation.z = std::sin(relative_yaw / 2.0);
+  pose_in_map.pose.orientation.w = std::cos(relative_yaw / 2.0);
 
   auto nav_goal = NavigateToPose::Goal();
   nav_goal.pose = pose_in_map;
@@ -136,7 +108,7 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
     nav_goal.pose.header.frame_id.c_str(),
     nav_goal.pose.pose.position.x,
     nav_goal.pose.pose.position.y,
-    goal->yaw,
+    static_cast<double>(goal->yaw),
     goal->absolute ? "true" : "false");
 
   auto send_goal_options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
@@ -170,7 +142,7 @@ void NavigateToPoseInFrame::feedback_callback(
   GoalHandleNavigateToPose::SharedPtr,
   const std::shared_ptr<const NavigateToPose::Feedback> feedback)
 {
-  RCLCPP_INFO(this->get_logger(), "Distance remaining: %.2f m", feedback->distance_remaining);
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Distance remaining: %.2f m", feedback->distance_remaining);
   
   if (active_goal_handle_) {
   auto fb = std::make_shared<NavigateToPoseInFrameAction::Feedback>();

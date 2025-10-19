@@ -3,10 +3,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "geometry_msgs/msg/pose.hpp"
 #include "amiga_interfaces/action/navigate_to_pose_in_frame.hpp"
-// TF2
-#include "tf2_ros/transform_listener.hpp"
-#include "tf2_ros/buffer.h"
 
 namespace amiga_navigation
 {
@@ -37,13 +35,15 @@ private:
     const std::shared_ptr<const NavigateToPose::Feedback> feedback);
   void result_callback(const GoalHandleNavigateToPose::WrappedResult & result);
 
+  void global_frame_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr global_frame_sub_;
   rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
   rclcpp_action::Server<NavigateToPoseInFrameAction>::SharedPtr action_server_;
   
   std::shared_ptr<GoalHandleNavigateToPoseInFrame> active_goal_handle_;
 
-  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  geometry_msgs::msg::Pose global_frame_pose_;
 };
 
 }  // namespace amiga_navigation

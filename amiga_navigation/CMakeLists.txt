@@ -19,6 +19,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -51,12 +52,10 @@ add_executable(navigate_to_pose_in_frame
 ament_target_dependencies(navigate_to_pose_in_frame
   rclcpp
   rclcpp_action
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
   amiga_interfaces
   nav2_msgs
   geometry_msgs
+  nav_msgs
 )
 
 install(TARGETS
