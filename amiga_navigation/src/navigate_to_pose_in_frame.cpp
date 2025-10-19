@@ -73,8 +73,8 @@ void NavigateToPoseInFrame::handle_accepted(
 
 void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle)
 {
-  RCLCPP_INFO(this->get_logger(), "Executing relative move goal");
   active_goal_handle_ = goal_handle;
+  RCLCPP_INFO(this->get_logger(), "Executing relative move goal");
 
   const auto goal = goal_handle->get_goal();
   auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
@@ -104,6 +104,7 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   pose_in_map.pose.position.y = global_frame_pose_.position.y + rotated_y;
   pose_in_map.pose.position.z = 0.0;
   double relative_yaw = goal->absolute ? static_cast<double>(goal->yaw) : static_cast<double>(goal->yaw) + current_yaw;
+  target_yaw_ = relative_yaw;
   pose_in_map.pose.orientation.x = 0.0;
   pose_in_map.pose.orientation.y = 0.0;
   pose_in_map.pose.orientation.z = std::sin(relative_yaw / 2.0);
@@ -124,8 +125,10 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   auto send_goal_options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
   send_goal_options.feedback_callback =
     std::bind(&NavigateToPoseInFrame::feedback_callback, this, _1, _2);
+  send_goal_options.result_callback = std::bind(&NavigateToPoseInFrame::result_callback, this, _1);
 
   auto goal_handle_future = nav_client_->async_send_goal(nav_goal, send_goal_options);
+
   if (goal_handle_future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
     RCLCPP_ERROR(this->get_logger(), "Timed out waiting for Nav2 goal acceptance");
     result->success = false;
@@ -146,46 +149,64 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   }
 
   RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2, navigating...");
-
-  if (goal_handle->is_canceling() || cancel_requested_.load()) {
-    RCLCPP_WARN(this->get_logger(), "Cancel requested; canceling Nav2 goal");
-    nav_client_->async_cancel_goal(nav2_goal_handle_);
-  }
-
-  auto result_future = nav_client_->async_get_result(nav2_goal_handle_);
-  result_future.wait();
-
-  const auto wrapped_result = result_future.get();
-  auto action_result = std::make_shared<NavigateToPoseInFrameAction::Result>();
-
-  if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-    RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
-    action_result->success = true;
-    action_result->message = "Navigation succeeded";
-    goal_handle->succeed(action_result);
-  } else {
-    RCLCPP_ERROR(this->get_logger(), "Navigation failed with code: %d", int(wrapped_result.code));
-    action_result->success = false;
-    action_result->message = "Navigation failed";
-    goal_handle->abort(action_result);
-  }
-
-  active_goal_handle_.reset();
-  nav2_goal_handle_.reset();
-  cancel_requested_.store(false);
 }
 
 void NavigateToPoseInFrame::feedback_callback(
   GoalHandleNavigateToPose::SharedPtr,
   const std::shared_ptr<const NavigateToPose::Feedback> feedback)
 {
-  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Distance remaining: %.2f m", feedback->distance_remaining);
-  
-  if (active_goal_handle_) {
-  auto fb = std::make_shared<NavigateToPoseInFrameAction::Feedback>();
-  fb->distance_remaining = feedback->distance_remaining;
-  active_goal_handle_->publish_feedback(fb);
+    auto current_time = this->now();
+    if ((current_time - last_feedback_time_).seconds() < 1.0) {
+        return;
+    }
+    last_feedback_time_ = current_time;
+    
+    fb_->distance_remaining = static_cast<double>(feedback->distance_remaining);
+    double current_yaw = std::atan2(2.0 * (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
+                 1.0 - 2.0 * (global_frame_pose_.orientation.z * global_frame_pose_.orientation.z));
+
+    auto normalize_angle = [](double angle) {
+        while (angle > M_PI) angle -= 2.0 * M_PI;
+        while (angle < -M_PI) angle += 2.0 * M_PI;
+        return angle;
+    };
+    
+    fb_->yaw_remaining = normalize_angle(target_yaw_ - current_yaw);
+
+    RCLCPP_INFO(this->get_logger(), "Distance remaining: %.2f m, Yaw remaining: %.2f rad, Current yaw: %.2f rad, Target yaw: %.2f rad",
+                fb_->distance_remaining,
+                fb_->yaw_remaining,
+                current_yaw,
+                target_yaw_);
+    
+    active_goal_handle_->publish_feedback(fb_);
+}
+
+void NavigateToPoseInFrame::result_callback(
+  const rclcpp_action::ClientGoalHandle<NavigateToPose>::WrappedResult & wrapped_result)
+{
+  auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
+
+  if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
+    result->success = true;
+    result->message = "Navigation succeeded";
+    active_goal_handle_->succeed(result);
+  } else if (wrapped_result.code == rclcpp_action::ResultCode::CANCELED) {
+    RCLCPP_WARN(this->get_logger(), "Navigation was canceled");
+    result->success = false;
+    result->message = "Navigation canceled";
+    active_goal_handle_->canceled(result);
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Navigation failed with code: %d", int(wrapped_result.code));
+    result->success = false;
+    result->message = "Navigation failed";
+    active_goal_handle_->abort(result);
   }
+
+  active_goal_handle_.reset();
+  nav2_goal_handle_.reset();
+  cancel_requested_.store(false);
 }
 
 }  // namespace amiga_navigation
