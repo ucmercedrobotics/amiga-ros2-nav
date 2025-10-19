@@ -116,7 +116,7 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
     nav_goal.pose.header.frame_id.c_str(),
     nav_goal.pose.pose.position.x,
     nav_goal.pose.pose.position.y,
-    static_cast<double>(goal->yaw),
+    relative_yaw,
     goal->absolute ? "true" : "false");
 
   auto send_goal_options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
