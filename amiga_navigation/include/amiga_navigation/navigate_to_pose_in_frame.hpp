@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
@@ -29,11 +31,9 @@ private:
   void handle_accepted(const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle);
   void execute(const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle);
 
-  void goal_response_callback(const GoalHandleNavigateToPose::SharedPtr & goal_handle);
   void feedback_callback(
     GoalHandleNavigateToPose::SharedPtr,
     const std::shared_ptr<const NavigateToPose::Feedback> feedback);
-  void result_callback(const GoalHandleNavigateToPose::WrappedResult & result);
 
   void global_frame_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
@@ -42,6 +42,8 @@ private:
   rclcpp_action::Server<NavigateToPoseInFrameAction>::SharedPtr action_server_;
   
   std::shared_ptr<GoalHandleNavigateToPoseInFrame> active_goal_handle_;
+  GoalHandleNavigateToPose::SharedPtr nav2_goal_handle_;
+  std::atomic<bool> cancel_requested_ {false};
 
   geometry_msgs::msg::Pose global_frame_pose_;
 };

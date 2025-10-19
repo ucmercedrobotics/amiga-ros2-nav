@@ -37,7 +37,6 @@ NavigateToPoseInFrame::NavigateToPoseInFrame(const rclcpp::NodeOptions & options
 
 void NavigateToPoseInFrame::global_frame_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
-  // Update the global frame based on the latest odometry message
   global_frame_pose_ = msg->pose.pose;
 }
 
@@ -58,6 +57,11 @@ rclcpp_action::CancelResponse NavigateToPoseInFrame::handle_cancel(
 {
   (void)goal_handle;
   RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
+  cancel_requested_.store(true);
+  if (nav2_goal_handle_) {
+    RCLCPP_INFO(this->get_logger(), "Forwarding cancel to Nav2");
+    nav_client_->async_cancel_goal(nav2_goal_handle_);
+  }
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
@@ -75,7 +79,6 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   const auto goal = goal_handle->get_goal();
   auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
 
-  // Check if Nav2 action server is available
   if (!nav_client_->wait_for_action_server(std::chrono::seconds(5))) {
     RCLCPP_ERROR(this->get_logger(), "Nav2 action server not available!");
     result->success = false;
@@ -100,7 +103,6 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   pose_in_map.pose.position.x = global_frame_pose_.position.x + rotated_x;
   pose_in_map.pose.position.y = global_frame_pose_.position.y + rotated_y;
   pose_in_map.pose.position.z = 0.0;
-  // If absolute orientation requested, keep relative yaw 0 here; we'll override later
   double relative_yaw = goal->absolute ? static_cast<double>(goal->yaw) : static_cast<double>(goal->yaw) + current_yaw;
   pose_in_map.pose.orientation.x = 0.0;
   pose_in_map.pose.orientation.y = 0.0;
@@ -120,30 +122,57 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
     goal->absolute ? "true" : "false");
 
   auto send_goal_options = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
-  send_goal_options.goal_response_callback = 
-    std::bind(&NavigateToPoseInFrame::goal_response_callback, this, _1);
-  send_goal_options.feedback_callback = 
+  send_goal_options.feedback_callback =
     std::bind(&NavigateToPoseInFrame::feedback_callback, this, _1, _2);
-  send_goal_options.result_callback = 
-    std::bind(&NavigateToPoseInFrame::result_callback, this, _1);
 
-  nav_client_->async_send_goal(nav_goal, send_goal_options);
-}
-
-void NavigateToPoseInFrame::goal_response_callback(
-  const GoalHandleNavigateToPose::SharedPtr & goal_handle)
-{
-  if (!goal_handle) {
-    RCLCPP_ERROR(this->get_logger(), "Goal was rejected by Nav2");
-    if (active_goal_handle_) {
-      auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
-      result->success = false;
-      result->message = "Nav2 goal rejected";
-      active_goal_handle_->abort(result);
-    }
-  } else {
-    RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2, navigating...");
+  auto goal_handle_future = nav_client_->async_send_goal(nav_goal, send_goal_options);
+  if (goal_handle_future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+    RCLCPP_ERROR(this->get_logger(), "Timed out waiting for Nav2 goal acceptance");
+    result->success = false;
+    result->message = "Timed out waiting for Nav2 goal acceptance";
+    goal_handle->abort(result);
+    active_goal_handle_.reset();
+    return;
   }
+
+  nav2_goal_handle_ = goal_handle_future.get();
+  if (!nav2_goal_handle_) {
+    RCLCPP_ERROR(this->get_logger(), "Goal was rejected by Nav2");
+    result->success = false;
+    result->message = "Nav2 goal rejected";
+    goal_handle->abort(result);
+    active_goal_handle_.reset();
+    return;
+  }
+
+  RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2, navigating...");
+
+  if (goal_handle->is_canceling() || cancel_requested_.load()) {
+    RCLCPP_WARN(this->get_logger(), "Cancel requested; canceling Nav2 goal");
+    nav_client_->async_cancel_goal(nav2_goal_handle_);
+  }
+
+  auto result_future = nav_client_->async_get_result(nav2_goal_handle_);
+  result_future.wait();
+
+  const auto wrapped_result = result_future.get();
+  auto action_result = std::make_shared<NavigateToPoseInFrameAction::Result>();
+
+  if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
+    action_result->success = true;
+    action_result->message = "Navigation succeeded";
+    goal_handle->succeed(action_result);
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Navigation failed with code: %d", int(wrapped_result.code));
+    action_result->success = false;
+    action_result->message = "Navigation failed";
+    goal_handle->abort(action_result);
+  }
+
+  active_goal_handle_.reset();
+  nav2_goal_handle_.reset();
+  cancel_requested_.store(false);
 }
 
 void NavigateToPoseInFrame::feedback_callback(
@@ -157,26 +186,6 @@ void NavigateToPoseInFrame::feedback_callback(
   fb->distance_remaining = feedback->distance_remaining;
   active_goal_handle_->publish_feedback(fb);
   }
-}
-
-void NavigateToPoseInFrame::result_callback(
-  const GoalHandleNavigateToPose::WrappedResult & result)
-{
-  auto action_result = std::make_shared<NavigateToPoseInFrameAction::Result>();
-  
-  if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-    RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
-    action_result->success = true;
-    action_result->message = "Navigation succeeded";
-    active_goal_handle_->succeed(action_result);
-  } else {
-    RCLCPP_ERROR(this->get_logger(), "Navigation failed");
-    action_result->success = false;
-    action_result->message = "Navigation failed";
-    active_goal_handle_->abort(action_result);
-  }
-  
-  active_goal_handle_.reset();
 }
 
 }  // namespace amiga_navigation
