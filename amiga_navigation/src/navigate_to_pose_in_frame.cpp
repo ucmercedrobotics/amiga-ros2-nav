@@ -87,6 +87,11 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
   double current_yaw = std::atan2(2.0 * (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
                1.0 - 2.0 * (global_frame_pose_.orientation.z * global_frame_pose_.orientation.z));
 
+  RCLCPP_INFO(this->get_logger(), "Global frame: x=%.2f, y=%.2f, yaw=%.2f rad",
+              global_frame_pose_.position.x,
+              global_frame_pose_.position.y,
+              current_yaw);
+
   geometry_msgs::msg::PoseStamped pose_in_map;
   pose_in_map.header.stamp = this->now();
   pose_in_map.header.frame_id = "map";
