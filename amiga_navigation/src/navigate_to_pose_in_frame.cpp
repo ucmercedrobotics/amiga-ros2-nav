@@ -84,16 +84,19 @@ void NavigateToPoseInFrame::execute(const std::shared_ptr<GoalHandleNavigateToPo
     return;
   }
 
+  double current_yaw = std::atan2(2.0 * (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
+               1.0 - 2.0 * (global_frame_pose_.orientation.z * global_frame_pose_.orientation.z));
+
   geometry_msgs::msg::PoseStamped pose_in_map;
   pose_in_map.header.stamp = this->now();
   pose_in_map.header.frame_id = "map";
-  pose_in_map.pose.position.x = global_frame_pose_.position.x + goal->x;
-  pose_in_map.pose.position.y = global_frame_pose_.position.y + goal->y;
+  double rotated_x = goal->x * std::cos(current_yaw) - goal->y * std::sin(current_yaw);
+  double rotated_y = goal->x * std::sin(current_yaw) + goal->y * std::cos(current_yaw);
+  pose_in_map.pose.position.x = global_frame_pose_.position.x + rotated_x;
+  pose_in_map.pose.position.y = global_frame_pose_.position.y + rotated_y;
   pose_in_map.pose.position.z = 0.0;
   // If absolute orientation requested, keep relative yaw 0 here; we'll override later
-  double relative_yaw = goal->absolute ? static_cast<double>(goal->yaw) : static_cast<double>(goal->yaw) + 
-    std::atan2(2.0 * (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
-               1.0 - 2.0 * (global_frame_pose_.orientation.z * global_frame_pose_.orientation.z));
+  double relative_yaw = goal->absolute ? static_cast<double>(goal->yaw) : static_cast<double>(goal->yaw) + current_yaw;
   pose_in_map.pose.orientation.x = 0.0;
   pose_in_map.pose.orientation.y = 0.0;
   pose_in_map.pose.orientation.z = std::sin(relative_yaw / 2.0);
