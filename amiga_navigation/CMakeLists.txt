@@ -58,9 +58,26 @@ ament_target_dependencies(navigate_to_pose_in_frame
   nav_msgs
 )
 
+add_executable(linear_velo
+  src/linear_velo.cpp
+)
+
+ament_target_dependencies(linear_velo
+  rclcpp
+  rclcpp_action
+  amiga_interfaces
+  nav2_msgs
+  geometry_msgs
+  nav_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+
 install(TARGETS
   lidar_object_navigator
   navigate_to_pose_in_frame
+  linear_velo
   DESTINATION lib/${PROJECT_NAME}
 )
 
