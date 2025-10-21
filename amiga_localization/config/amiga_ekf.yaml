@@ -8,7 +8,6 @@
 # -- Local EKF Filter (Odom)
 ekf_local_filter_node:
   ros__parameters:
-    frequency: 20.0
     sensor_timeout: 0.2
     two_d_mode: true
     transform_time_offset: 0.1
@@ -21,7 +20,7 @@ ekf_local_filter_node:
     odom_frame: odom
     base_link_frame: base_link
     world_frame: odom
-    
+
     # -- Wheel Odometry
     odom0: wheel/odometry
     # -- [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
@@ -33,8 +32,8 @@ ekf_local_filter_node:
     odom0_queue_size: 10
     odom0_differential: false
     odom0_relative: false
-    
-    
+
+
     # -- Oak0 Imu
     imu0: oak1/imu/data
     imu0_config: [false, false, false,
@@ -46,8 +45,8 @@ ekf_local_filter_node:
     imu0_differential: false
     imu0_relative: false
     imu0_nodelay: true
-    imu0_pose_rejection_threshold: 10.0     
-    imu0_twist_rejection_threshold: 10.0   
+    imu0_pose_rejection_threshold: 10.0
+    imu0_twist_rejection_threshold: 10.0
     imu0_linear_acceleration_rejection_threshold: 10.0
 
     # imu1: oak1/imu/data
@@ -60,10 +59,10 @@ ekf_local_filter_node:
     # imu1_differential: false
     # imu1_relative: true
     # imu1_nodelay: false
-    # imu1_pose_rejection_threshold: 10.0     
-    # imu1_twist_rejection_threshold: 10.0   
+    # imu1_pose_rejection_threshold: 10.0
+    # imu1_twist_rejection_threshold: 10.0
     # imu1_linear_acceleration_rejection_threshold: 10.0
-    
+
     use_control: false
     control_timeout: 0.2
 
@@ -73,18 +72,17 @@ ekf_local_filter_node:
 # -- Global EKF Filter (Map)
 ekf_global_filter_node:
   ros__parameters:
-    frequency: 10.0
     sensor_timeout: 0.2
     two_d_mode: true
     transform_time_offset: 0.1
     transform_timeout: 0.05
     publish_tf: true
-    
+
     map_frame: map
     odom_frame: odom
     base_link_frame: base_link
     world_frame: map
-    
+
     # -- Inputs
     # -- GPS
     odom0: odometry/gps
@@ -109,7 +107,7 @@ ekf_global_filter_node:
     odom1_queue_size: 10
     odom1_differential: false
     odom1_relative: false
-    
+
     # -- Oak0 Imu
     imu0: oak1/imu/data
     imu0_config: [false, false, false,
@@ -121,10 +119,10 @@ ekf_global_filter_node:
     imu0_differential: false
     imu0_relative: false
     imu0_nodelay: true
-    imu0_pose_rejection_threshold: 10.0     
-    imu0_twist_rejection_threshold: 10.0   
+    imu0_pose_rejection_threshold: 10.0
+    imu0_twist_rejection_threshold: 10.0
     imu0_linear_acceleration_rejection_threshold: 10.0
-    
+
     # imu1: oak0/imu/data
     # imu1_config: [false, false, false,
     #               false, false, false,
@@ -135,10 +133,10 @@ ekf_global_filter_node:
     # imu1_differential: false
     # imu1_relative: true
     # imu1_nodelay: false
-    # imu1_pose_rejection_threshold: 10.0     
-    # imu1_twist_rejection_threshold: 10.0   
+    # imu1_pose_rejection_threshold: 10.0
+    # imu1_twist_rejection_threshold: 10.0
     # imu1_linear_acceleration_rejection_threshold: 10.0
-    
+
     use_control: false
     control_timeout: 0.2
 
@@ -150,7 +148,7 @@ navsat_transform_node:
         frequency: 5.0
         delay: 3.0
 
-        # TODO: Verify IMU data 
+        # TODO: Verify IMU data
         use_odometry_yaw: false
         magnetic_declination_radians: 0.2193
         yaw_offset: 0.0

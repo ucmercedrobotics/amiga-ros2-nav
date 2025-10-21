@@ -66,7 +66,6 @@ ament_target_dependencies(linear_velo
   rclcpp
   rclcpp_action
   amiga_interfaces
-  nav2_msgs
   geometry_msgs
   nav_msgs
   tf2
