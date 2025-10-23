@@ -1,7 +1,7 @@
 #pragma once
 
-#include "amiga_interfaces/action/navigate_to_object.hpp"
 #include "amiga_interfaces/action/navigate_to_pose_in_frame.hpp"
+#include "amiga_interfaces/action/navigate_via_lidar.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -18,9 +18,9 @@ class LidarObjectNavigator : public rclcpp::Node {
       amiga_interfaces::action::NavigateToPoseInFrame;
   using GoalHandleNavigateToPoseInFrame =
       rclcpp_action::ClientGoalHandle<NavigateToPoseInFrameAction>;
-  using NavigateToObject = amiga_interfaces::action::NavigateToObject;
-  using GoalHandleNavigateToObject =
-      rclcpp_action::ServerGoalHandle<NavigateToObject>;
+  using NavigateViaLidar = amiga_interfaces::action::NavigateViaLidar;
+  using GoalHandleNavigateViaLidar =
+      rclcpp_action::ServerGoalHandle<NavigateViaLidar>;
 
   explicit LidarObjectNavigator(
       const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
@@ -32,12 +32,12 @@ class LidarObjectNavigator : public rclcpp::Node {
   // Action server callbacks
   rclcpp_action::GoalResponse handle_goal(
       const rclcpp_action::GoalUUID& uuid,
-      std::shared_ptr<const NavigateToObject::Goal> goal);
+      std::shared_ptr<const NavigateViaLidar::Goal> goal);
   rclcpp_action::CancelResponse handle_cancel(
-      const std::shared_ptr<GoalHandleNavigateToObject> goal_handle);
+      const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle);
   void handle_accepted(
-      const std::shared_ptr<GoalHandleNavigateToObject> goal_handle);
-  void execute(const std::shared_ptr<GoalHandleNavigateToObject> goal_handle);
+      const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle);
+  void execute(const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle);
 
   // NavigateToPoseInFrame action client callbacks
   void goal_response_callback(
@@ -52,12 +52,11 @@ class LidarObjectNavigator : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr lidar_sub_;
   rclcpp_action::Client<NavigateToPoseInFrameAction>::SharedPtr
       navigate_to_pose_in_frame_client_;
-  rclcpp_action::Server<NavigateToObject>::SharedPtr action_server_;
+  rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
 
-  float closest_object_distance_ = 0.0f;
-  float closest_object_angle_ = 0.0f;
+  sensor_msgs::msg::LaserScan::SharedPtr latest_scan_;
 
-  std::shared_ptr<GoalHandleNavigateToObject> active_goal_handle_;
+  std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
 };
 
 }  // namespace amiga_navigation
