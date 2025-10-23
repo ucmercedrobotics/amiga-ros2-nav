@@ -10,9 +10,7 @@ using namespace std::placeholders;
 namespace amiga_navigation {
 
 LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
-    : Node("lidar_object_navigator", options),
-      closest_object_distance_(std::numeric_limits<float>::max()),
-      closest_object_angle_(0.0f) {
+    : Node("lidar_object_navigator", options) {
   this->declare_parameter<std::string>("lidar_topic", "/scan");
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
 
@@ -25,8 +23,8 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
       rclcpp_action::create_client<NavigateToPoseInFrameAction>(
           this, "navigate_to_pose_in_frame");
 
-  action_server_ = rclcpp_action::create_server<NavigateToObject>(
-      this, "navigate_to_object",
+  action_server_ = rclcpp_action::create_server<NavigateViaLidar>(
+      this, "navigate_via_lidar",
       std::bind(&LidarObjectNavigator::handle_goal, this, _1, _2),
       std::bind(&LidarObjectNavigator::handle_cancel, this, _1),
       std::bind(&LidarObjectNavigator::handle_accepted, this, _1));
@@ -38,33 +36,12 @@ void LidarObjectNavigator::lidar_callback(
     const sensor_msgs::msg::LaserScan::SharedPtr msg) {
   RCLCPP_DEBUG(this->get_logger(), "Received LaserScan with %zu points",
                msg->ranges.size());
-
-  float min_range = std::numeric_limits<float>::max();
-  size_t min_index = 0;
-
-  for (size_t i = 0; i < msg->ranges.size(); ++i) {
-    if (msg->ranges[i] < min_range && msg->ranges[i] >= msg->range_min &&
-        msg->ranges[i] <= msg->range_max) {
-      min_range = msg->ranges[i];
-      min_index = i;
-    }
-  }
-
-  if (min_range < std::numeric_limits<float>::max()) {
-    float angle = msg->angle_min + min_index * msg->angle_increment;
-
-    closest_object_distance_ = min_range;
-    closest_object_angle_ = angle;
-
-    RCLCPP_DEBUG(this->get_logger(),
-                 "Closest obstacle at %.2f meters, angle %.2f rad", min_range,
-                 angle);
-  }
+  latest_scan_ = msg;
 }
 
 rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
     const rclcpp_action::GoalUUID& uuid,
-    std::shared_ptr<const NavigateToObject::Goal> goal) {
+    std::shared_ptr<const NavigateViaLidar::Goal> goal) {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(),
               "Received goal to navigate to object index %d",
@@ -73,38 +50,69 @@ rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
 }
 
 rclcpp_action::CancelResponse LidarObjectNavigator::handle_cancel(
-    const std::shared_ptr<GoalHandleNavigateToObject> goal_handle) {
+    const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle) {
   (void)goal_handle;
   RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
 void LidarObjectNavigator::handle_accepted(
-    const std::shared_ptr<GoalHandleNavigateToObject> goal_handle) {
+    const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle) {
   std::thread{std::bind(&LidarObjectNavigator::execute, this, _1), goal_handle}
       .detach();
 }
 
 void LidarObjectNavigator::execute(
-    const std::shared_ptr<GoalHandleNavigateToObject> goal_handle) {
+    const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle) {
   RCLCPP_INFO(this->get_logger(),
-              "Executing goal: navigating to selected object");
+              "Executing goal: navigating to object at index %d",
+              goal_handle->get_goal()->object_index);
   active_goal_handle_ = goal_handle;
 
-  auto feedback = std::make_shared<NavigateToObject::Feedback>();
-  auto result = std::make_shared<NavigateToObject::Result>();
+  auto feedback = std::make_shared<NavigateViaLidar::Feedback>();
+  auto result = std::make_shared<NavigateViaLidar::Result>();
 
-  // TODO: Replace with logic to select object by index
-  // For now, use closest object as before
-  if (closest_object_distance_ == 0.0f) {
-    RCLCPP_WARN(
-        this->get_logger(),
-        "Either at location or no LiDAR data. Cannot navigate to object.");
+  if (!latest_scan_) {
+    RCLCPP_WARN(this->get_logger(), "No LiDAR data available yet.");
     result->success = false;
-    result->message = "No valid lidar data";
+    result->message = "No LiDAR data available";
     goal_handle->abort(result);
     return;
   }
+
+  int32_t object_index = goal_handle->get_goal()->object_index;
+
+  if (object_index < 0 ||
+      static_cast<size_t>(object_index) >= latest_scan_->ranges.size()) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "Invalid object_index %d. Scan has %zu points.", object_index,
+                 latest_scan_->ranges.size());
+    result->success = false;
+    result->message = "Invalid object_index";
+    goal_handle->abort(result);
+    return;
+  }
+
+  float object_distance = latest_scan_->ranges[object_index];
+
+  if (object_distance < latest_scan_->range_min ||
+      object_distance > latest_scan_->range_max ||
+      std::isnan(object_distance) || std::isinf(object_distance)) {
+    RCLCPP_WARN(this->get_logger(),
+                "Invalid range reading at index %d: %.2f meters", object_index,
+                object_distance);
+    result->success = false;
+    result->message = "Invalid range reading at specified index";
+    goal_handle->abort(result);
+    return;
+  }
+
+  float object_angle =
+      latest_scan_->angle_min + object_index * latest_scan_->angle_increment;
+
+  RCLCPP_INFO(this->get_logger(),
+              "Object at index %d: distance=%.2f m, angle=%.2f rad",
+              object_index, object_distance, object_angle);
 
   if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
@@ -117,10 +125,9 @@ void LidarObjectNavigator::execute(
   }
 
   float safety_distance = SAFETY_DISTANCE;
-  float target_distance =
-      std::max(0.0f, closest_object_distance_ - safety_distance);
-  float target_x = target_distance * std::cos(closest_object_angle_);
-  float target_y = target_distance * std::sin(closest_object_angle_);
+  float target_distance = std::max(0.0f, object_distance - safety_distance);
+  float target_x = target_distance * std::cos(object_angle);
+  float target_y = target_distance * std::sin(object_angle);
 
   RCLCPP_INFO(this->get_logger(), "Sending relative move goal: (%.2f, %.2f)",
               target_x, target_y);
@@ -128,8 +135,8 @@ void LidarObjectNavigator::execute(
   auto goal_msg = NavigateToPoseInFrameAction::Goal();
   goal_msg.x = target_x;
   goal_msg.y = target_y;
-  goal_msg.yaw = closest_object_angle_;
-  goal_msg.absolute = false;  // orientation is relative to base_link
+  goal_msg.yaw = object_angle;
+  goal_msg.absolute = false;
 
   auto send_goal_options =
       rclcpp_action::Client<NavigateToPoseInFrameAction>::SendGoalOptions();
@@ -150,7 +157,7 @@ void LidarObjectNavigator::goal_response_callback(
     RCLCPP_ERROR(this->get_logger(),
                  "Goal was rejected by NavigateToPoseInFrameAction server");
     if (active_goal_handle_) {
-      auto result = std::make_shared<NavigateToObject::Result>();
+      auto result = std::make_shared<NavigateViaLidar::Result>();
       result->success = false;
       result->message = "NavigateToPoseInFrameAction goal rejected";
       active_goal_handle_->abort(result);
@@ -169,7 +176,7 @@ void LidarObjectNavigator::feedback_callback(
   RCLCPP_INFO(this->get_logger(), "Distance remaining: %.2f m",
               feedback->distance_remaining);
   if (active_goal_handle_) {
-    auto fb = std::make_shared<NavigateToObject::Feedback>();
+    auto fb = std::make_shared<NavigateViaLidar::Feedback>();
     fb->distance_remaining = feedback->distance_remaining;
     active_goal_handle_->publish_feedback(fb);
   }
@@ -177,7 +184,7 @@ void LidarObjectNavigator::feedback_callback(
 
 void LidarObjectNavigator::result_callback(
     const GoalHandleNavigateToPoseInFrame::WrappedResult& result) {
-  auto action_result = std::make_shared<NavigateToObject::Result>();
+  auto action_result = std::make_shared<NavigateViaLidar::Result>();
   if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
     RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
     action_result->success = true;
