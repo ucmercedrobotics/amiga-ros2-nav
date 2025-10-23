@@ -1,0 +1,7 @@
+# Goal definition
+int32 object_index  # Index of the object in the scan to navigate to
+---
+bool success
+string message
+---
+float32 distance_remaining
