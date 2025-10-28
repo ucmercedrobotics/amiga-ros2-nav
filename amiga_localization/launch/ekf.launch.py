@@ -41,7 +41,7 @@ def generate_launch_description():
                 remappings=[
                     # -- Inputs
                     ("imu/data", "/oak1/imu/data"),
-                    ("gps/fix", "/ublox_gps_node/fix"),
+                    ("gps/fix", "/gps/pvt"),
                     ("odometry/filtered", "odometry/filtered/global"),
                     # -- Outputs
                     # ("gps/filtered", "gps/filtered"),
