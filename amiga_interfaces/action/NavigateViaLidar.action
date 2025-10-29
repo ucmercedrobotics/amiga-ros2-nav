@@ -1,5 +1,5 @@
 # Goal definition
-int32 object_index  # Index of the object in the scan to navigate to
+float32 object_angle
 ---
 bool success
 string message
