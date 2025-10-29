@@ -9,6 +9,9 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
 #define SAFETY_DISTANCE 0.75f
+#define AZIMUTH_TOLERANCE 0.0175f
+#define MIN_OBJECT_HEIGHT 1.0f
+#define MAX_OBJECT_HEIGHT 1.5f
 
 namespace amiga_navigation {
 

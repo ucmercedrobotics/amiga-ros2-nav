@@ -1,6 +1,7 @@
 #include "amiga_navigation/lidar_object_navigator.hpp"
 
 #include <cmath>
+#include <Eigen/Dense>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -13,7 +14,7 @@ namespace amiga_navigation {
 
 LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
     : Node("lidar_object_navigator", options) {
-  this->declare_parameter<std::string>("lidar_topic", "/scan");
+  this->declare_parameter<std::string>("lidar_topic", "/ouster/points");
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
 
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
@@ -47,8 +48,8 @@ rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
     std::shared_ptr<const NavigateViaLidar::Goal> goal) {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(),
-              "Received goal to navigate to object index %d",
-              goal->object_index);
+              "Received goal to navigate to object angle %f",
+              goal->object_angle);
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
@@ -67,80 +68,64 @@ void LidarObjectNavigator::handle_accepted(
 
 void LidarObjectNavigator::execute(
     const std::shared_ptr<GoalHandleNavigateViaLidar> goal_handle) {
-  RCLCPP_INFO(this->get_logger(),
-              "Executing goal: navigating to object at index %d",
-              goal_handle->get_goal()->object_index);
-  active_goal_handle_ = goal_handle;
-
-  auto feedback = std::make_shared<NavigateViaLidar::Feedback>();
-  auto result = std::make_shared<NavigateViaLidar::Result>();
-
   if (!latest_scan_) {
     RCLCPP_WARN(this->get_logger(), "No LiDAR data available yet.");
-    result->success = false;
-    result->message = "No LiDAR data available";
-    goal_handle->abort(result);
     return;
   }
 
-  int32_t object_index = goal_handle->get_goal()->object_index;
-  if (object_index < 0) {
-    RCLCPP_ERROR(this->get_logger(), "Invalid object_index %d (negative)",
-                 object_index);
-    result->success = false;
-    result->message = "Invalid object_index";
-    goal_handle->abort(result);
+  auto result = std::make_shared<NavigateViaLidar::Result>();
+  double theta_target = goal_handle->get_goal()->object_angle;
+  double azimuth_tolerance = AZIMUTH_TOLERANCE; 
+
+  const auto &pc = *latest_scan_;
+  sensor_msgs::PointCloud2ConstIterator<float> iter_x(pc, "x");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_y(pc, "y");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_z(pc, "z");
+
+  std::vector<Eigen::Vector3f> selected_points;
+  float x, y, z;
+
+  for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+    x = *iter_x;
+    y = *iter_y;
+    z = *iter_z;
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+      continue;
+
+    double azimuth = std::atan2(y, x);
+    double diff = std::atan2(std::sin(azimuth - theta_target),
+                            std::cos(azimuth - theta_target));
+
+    if (std::fabs(diff) < azimuth_tolerance) {
+      if (z > MIN_OBJECT_HEIGHT && z < MAX_OBJECT_HEIGHT) {
+        selected_points.emplace_back(x, y, z);
+      }
+    }
+  }
+
+  if (selected_points.empty()) {
+    RCLCPP_WARN(this->get_logger(), "No points found at orientation %.2f rad", theta_target);
     return;
   }
-
-  auto &pc = *latest_scan_;
-  const size_t point_count = static_cast<size_t>(pc.width) * pc.height;
-  if (static_cast<size_t>(object_index) >= point_count) {
-    RCLCPP_ERROR(this->get_logger(),
-                 "Invalid object_index %d. PointCloud has %zu points.",
-                 object_index, point_count);
-    result->success = false;
-    result->message = "Invalid object_index";
-    goal_handle->abort(result);
-    return;
-  }
-
-  // Extract x,y,z from PointCloud2 at the requested index
-  sensor_msgs::PointCloud2Iterator<float> iter_x(pc, "x");
-  sensor_msgs::PointCloud2Iterator<float> iter_y(pc, "y");
-  sensor_msgs::PointCloud2Iterator<float> iter_z(pc, "z");
-  // advance to index
-  size_t idx = static_cast<size_t>(object_index);
-  for (size_t i = 0; i < idx; ++i) {
-    ++iter_x;
-    ++iter_y;
-    ++iter_z;
-  }
-
-  float x = *iter_x;
-  float y = *iter_y;
-  float z = *iter_z;
-
-  if (std::isnan(x) || std::isnan(y) || std::isnan(z) ||
-      std::isinf(x) || std::isinf(y) || std::isinf(z)) {
-    RCLCPP_WARN(this->get_logger(),
-                "Invalid point reading at index %d: (x=%.3f,y=%.3f,z=%.3f)",
-                object_index, x, y, z);
-    result->success = false;
-    result->message = "Invalid point reading at specified index";
-    goal_handle->abort(result);
-    return;
-  }
-
-  // For a ground robot we use the horizontal (ground) distance ignoring z
-  float ground_distance = std::sqrt(x * x + y * y);
-  float object_distance = ground_distance;  // preserve name used below
-  float object_angle = std::atan2(y, x);  // yaw in sensor frame
 
   RCLCPP_INFO(this->get_logger(),
-              "Object at index %d: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m,"
+              "Found %zu points near %.2f rad. Height range: [%.2f, %.2f] m",
+              selected_points.size(), theta_target, MIN_OBJECT_HEIGHT, MAX_OBJECT_HEIGHT);
+
+  // TODO: be more intelligent about which point to choose
+  x = selected_points[0](0);
+  y = selected_points[0](1);
+  z = selected_points[0](2);
+
+  // TODO: we need to convert this into base frame coordinates, not sensor
+  float ground_distance = std::sqrt(x * x + y * y);
+  float object_distance = ground_distance;
+  float object_angle = std::atan2(y, x);
+
+  RCLCPP_INFO(this->get_logger(),
+              "Object at: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m,"
               " angle=%.2f rad",
-              object_index, x, y, z, ground_distance, object_angle);
+              x, y, z, ground_distance, object_angle);
 
   if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
