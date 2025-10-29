@@ -4,6 +4,8 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/point_cloud2_iterator.hpp"
 
 using namespace std::placeholders;
 
@@ -15,9 +17,9 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
 
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
-  lidar_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-      lidar_topic, qos,
-      std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
+  lidar_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+    lidar_topic, qos,
+    std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
 
   navigate_to_pose_in_frame_client_ =
       rclcpp_action::create_client<NavigateToPoseInFrameAction>(
@@ -33,9 +35,10 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
 }
 
 void LidarObjectNavigator::lidar_callback(
-    const sensor_msgs::msg::LaserScan::SharedPtr msg) {
-  RCLCPP_DEBUG(this->get_logger(), "Received LaserScan with %zu points",
-               msg->ranges.size());
+    const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+  size_t point_count = static_cast<size_t>(msg->width) * msg->height;
+  RCLCPP_DEBUG(this->get_logger(), "Received PointCloud2 with %zu points",
+               point_count);
   latest_scan_ = msg;
 }
 
@@ -81,38 +84,63 @@ void LidarObjectNavigator::execute(
   }
 
   int32_t object_index = goal_handle->get_goal()->object_index;
-
-  if (object_index < 0 ||
-      static_cast<size_t>(object_index) >= latest_scan_->ranges.size()) {
-    RCLCPP_ERROR(this->get_logger(),
-                 "Invalid object_index %d. Scan has %zu points.", object_index,
-                 latest_scan_->ranges.size());
+  if (object_index < 0) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid object_index %d (negative)",
+                 object_index);
     result->success = false;
     result->message = "Invalid object_index";
     goal_handle->abort(result);
     return;
   }
 
-  float object_distance = latest_scan_->ranges[object_index];
-
-  if (object_distance < latest_scan_->range_min ||
-      object_distance > latest_scan_->range_max ||
-      std::isnan(object_distance) || std::isinf(object_distance)) {
-    RCLCPP_WARN(this->get_logger(),
-                "Invalid range reading at index %d: %.2f meters", object_index,
-                object_distance);
+  auto &pc = *latest_scan_;
+  const size_t point_count = static_cast<size_t>(pc.width) * pc.height;
+  if (static_cast<size_t>(object_index) >= point_count) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "Invalid object_index %d. PointCloud has %zu points.",
+                 object_index, point_count);
     result->success = false;
-    result->message = "Invalid range reading at specified index";
+    result->message = "Invalid object_index";
     goal_handle->abort(result);
     return;
   }
 
-  float object_angle =
-      latest_scan_->angle_min + object_index * latest_scan_->angle_increment;
+  // Extract x,y,z from PointCloud2 at the requested index
+  sensor_msgs::PointCloud2Iterator<float> iter_x(pc, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(pc, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(pc, "z");
+  // advance to index
+  size_t idx = static_cast<size_t>(object_index);
+  for (size_t i = 0; i < idx; ++i) {
+    ++iter_x;
+    ++iter_y;
+    ++iter_z;
+  }
+
+  float x = *iter_x;
+  float y = *iter_y;
+  float z = *iter_z;
+
+  if (std::isnan(x) || std::isnan(y) || std::isnan(z) ||
+      std::isinf(x) || std::isinf(y) || std::isinf(z)) {
+    RCLCPP_WARN(this->get_logger(),
+                "Invalid point reading at index %d: (x=%.3f,y=%.3f,z=%.3f)",
+                object_index, x, y, z);
+    result->success = false;
+    result->message = "Invalid point reading at specified index";
+    goal_handle->abort(result);
+    return;
+  }
+
+  // For a ground robot we use the horizontal (ground) distance ignoring z
+  float ground_distance = std::sqrt(x * x + y * y);
+  float object_distance = ground_distance;  // preserve name used below
+  float object_angle = std::atan2(y, x);  // yaw in sensor frame
 
   RCLCPP_INFO(this->get_logger(),
-              "Object at index %d: distance=%.2f m, angle=%.2f rad",
-              object_index, object_distance, object_angle);
+              "Object at index %d: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m,"
+              " angle=%.2f rad",
+              object_index, x, y, z, ground_distance, object_angle);
 
   if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {

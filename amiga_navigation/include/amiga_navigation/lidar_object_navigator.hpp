@@ -6,7 +6,7 @@
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 
 #define SAFETY_DISTANCE 0.75f
 
@@ -27,7 +27,7 @@ class LidarObjectNavigator : public rclcpp::Node {
   ~LidarObjectNavigator() = default;
 
  private:
-  void lidar_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+    void lidar_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
 
   // Action server callbacks
   rclcpp_action::GoalResponse handle_goal(
@@ -49,12 +49,12 @@ class LidarObjectNavigator : public rclcpp::Node {
   void result_callback(
       const GoalHandleNavigateToPoseInFrame::WrappedResult& result);
 
-  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr lidar_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
   rclcpp_action::Client<NavigateToPoseInFrameAction>::SharedPtr
       navigate_to_pose_in_frame_client_;
   rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
 
-  sensor_msgs::msg::LaserScan::SharedPtr latest_scan_;
+    sensor_msgs::msg::PointCloud2::SharedPtr latest_scan_;
 
   std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
 };
