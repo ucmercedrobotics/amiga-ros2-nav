@@ -1,0 +1,3 @@
+#IMU
+SUBSYSTEM=="tty", ATTRS{idVendor}=="ID_VENDOR_ID", ATTRS{idProduct}=="ID_MODEL_ID", ATTRS{serial}=="ID_SERIAL_SHORT", SYMLINK+="imu", MODE="0666"
+
