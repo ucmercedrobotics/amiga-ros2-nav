@@ -43,7 +43,7 @@ class WaypointFollowerActionServer(Node):
         #        and not the output of the EKF
         self._gps_sub = self.create_subscription(
             msg_type=NavSatFix,
-            topic="/ublox_gps_node/fix",
+            topic="/gps/pvt",
             callback=self.pose_cb,
             qos_profile=10,
         )
