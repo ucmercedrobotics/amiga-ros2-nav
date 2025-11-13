@@ -89,6 +89,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/joy_gps_waypoint_logger.py
   scripts/waypoint_follower.py
+  scripts/gps_plotter.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
