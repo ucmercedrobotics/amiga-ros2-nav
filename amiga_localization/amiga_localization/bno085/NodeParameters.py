@@ -42,7 +42,7 @@ class NodeParameters:
         # Node timer frequency in Hz, defining how often calibration status data is requested
         node.declare_parameter("calib_status_frequency", value=1)
         # perform initial calibration?
-        node.declare_parameter("initial_calibration", value=True)
+        node.declare_parameter("initial_calibration", value=False)
         node.declare_parameter("calibration_timeout", value=30)
 
         # sensor operation mode
