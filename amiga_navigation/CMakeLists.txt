@@ -26,7 +26,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(amiga_interfaces REQUIRED)
+find_package(amiga_navigation_interfaces REQUIRED)
 
 # Include directories
 include_directories(
@@ -40,7 +40,7 @@ add_executable(lidar_object_navigator
 ament_target_dependencies(lidar_object_navigator
   rclcpp
   rclcpp_action
-  amiga_interfaces
+  amiga_navigation_interfaces
   nav2_msgs
   sensor_msgs
   geometry_msgs
@@ -54,7 +54,7 @@ add_executable(navigate_to_pose_in_frame
 ament_target_dependencies(navigate_to_pose_in_frame
   rclcpp
   rclcpp_action
-  amiga_interfaces
+  amiga_navigation_interfaces
   nav2_msgs
   geometry_msgs
   nav_msgs
@@ -67,7 +67,7 @@ add_executable(linear_velo
 ament_target_dependencies(linear_velo
   rclcpp
   rclcpp_action
-  amiga_interfaces
+  amiga_navigation_interfaces
   geometry_msgs
   nav_msgs
   tf2

@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-#include "amiga_interfaces/action/navigate_to_pose_in_frame.hpp"
+#include "amiga_navigation_interfaces/action/navigate_to_pose_in_frame.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -17,7 +17,7 @@ class NavigateToPoseInFrame : public rclcpp::Node {
   using GoalHandleNavigateToPose =
       rclcpp_action::ClientGoalHandle<NavigateToPose>;
   using NavigateToPoseInFrameAction =
-      amiga_interfaces::action::NavigateToPoseInFrame;
+      amiga_navigation_interfaces::action::NavigateToPoseInFrame;
   using GoalHandleNavigateToPoseInFrame =
       rclcpp_action::ServerGoalHandle<NavigateToPoseInFrameAction>;
 
