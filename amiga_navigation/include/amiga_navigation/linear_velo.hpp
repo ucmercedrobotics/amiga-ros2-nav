@@ -5,7 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
-#include "amiga_interfaces/action/navigate_to_pose_in_frame.hpp"
+#include "amiga_navigation_interfaces/action/navigate_to_pose_in_frame.hpp"
 
 static constexpr double MIN_LINEAR_VELOCITY = 0.2f;
 static constexpr double MAX_LINEAR_VELOCITY = 1.0f;
@@ -16,7 +16,7 @@ namespace amiga_navigation {
 class LinearVelo : public rclcpp::Node {
  public:
   using NavigateToPoseInFrameAction =
-      amiga_interfaces::action::NavigateToPoseInFrame;
+      amiga_navigation_interfaces::action::NavigateToPoseInFrame;
   using GoalHandleNavigateToPoseInFrame =
       rclcpp_action::ServerGoalHandle<NavigateToPoseInFrameAction>;
 

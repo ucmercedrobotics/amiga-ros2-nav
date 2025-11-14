@@ -7,7 +7,7 @@
 #include <cmath>
 #include <thread>
 
-#include "amiga_interfaces/action/navigate_to_pose_in_frame.hpp"
+#include "amiga_navigation_interfaces/action/navigate_to_pose_in_frame.hpp"
 
 namespace amiga_navigation {
 

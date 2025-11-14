@@ -12,7 +12,7 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
 
-from amiga_interfaces.action import Wpfollow  # type: ignore
+from amiga_navigation_interfaces.action import Wpfollow  # type: ignore
 
 
 class WaypointFollowerActionServer(Node):
