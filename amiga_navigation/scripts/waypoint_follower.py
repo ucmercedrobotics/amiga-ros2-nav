@@ -124,7 +124,7 @@ class WaypointFollowerActionServer(Node):
             )
             self.get_logger().info("distance to goal %f" % feedback_msg.dist)
             goal_handle.publish_feedback(feedback_msg)  # send the feedback message
-            time.sleep(0.5)
+            rclpy.spin_once(self, timeout_sec=0.5)
 
         # at goal reached
         goal_handle.succeed()
@@ -134,6 +134,10 @@ class WaypointFollowerActionServer(Node):
         result = Wpfollow.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
+        result.direction = np.arctan2(
+            goal_pose.pose.position.y - self.utm_position[1],
+            goal_pose.pose.position.x - self.utm_position[0],
+        )
         return result
 
 
