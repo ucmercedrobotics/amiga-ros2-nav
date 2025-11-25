@@ -8,3 +8,6 @@ This describes the current state of Amiga localization using ROS2/Nav2. This pip
 2. Run `vcs import < nav.repos` to install the required 3rd party packages
 
 3. The remaining steps require the rest of the Amiga ROS2 packages, so see steps in [`amiga-ros2-bridge`](https://github.com/ucmercedrobotics/amiga-ros2-bridge).
+
+## VectorNav
+If using the VectorNav IMU, also make sure to import the ROS2 drivers using `vcs import < vectornav.repos`.
