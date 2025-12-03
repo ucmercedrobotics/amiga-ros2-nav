@@ -9,6 +9,7 @@ import os
 def generate_launch_description():
 
     use_vectornav = LaunchConfiguration("use_vectornav")
+    gps_topic = LaunchConfiguration("gps_topic")
 
     pkg_share = get_package_share_directory("amiga_localization")
 
@@ -33,6 +34,11 @@ def generate_launch_description():
                 "use_vectornav",
                 default_value="false",
                 description="Use vectornav_ekf.yaml (true) or base_ekf.yaml (false)",
+            ),
+            DeclareLaunchArgument(
+                "gps_topic",
+                default_value="/gps/pvt",
+                description="GPS fix topic to remap to /gps/fix",
             ),
             DeclareLaunchArgument("output_final_position", default_value="false"),
             DeclareLaunchArgument(
@@ -63,6 +69,7 @@ def generate_launch_description():
                 remappings=[
                     # -- Inputs
                     ("odometry/filtered", "odometry/filtered/global"),
+                    ("/gps/fix", gps_topic),
                 ],
             ),
         ]
