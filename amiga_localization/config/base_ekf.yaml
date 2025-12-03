@@ -35,7 +35,7 @@ ekf_local_filter_node:
 
 
     # -- Oak0 Imu
-    imu0: oak1/imu/data
+    imu0: /bno085/imu/data
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
@@ -109,7 +109,7 @@ ekf_global_filter_node:
     odom1_relative: false
 
     # -- Oak0 Imu
-    imu0: oak1/imu/data
+    imu0: /bno085/imu
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,

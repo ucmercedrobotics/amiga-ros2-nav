@@ -43,7 +43,7 @@ class WaypointFollowerActionServer(Node):
         #        and not the output of the EKF
         self._gps_sub = self.create_subscription(
             msg_type=NavSatFix,
-            topic="/ublox_gps_node/fix",
+            topic="/gps/pvt",
             callback=self.pose_cb,
             qos_profile=10,
         )
@@ -113,6 +113,10 @@ class WaypointFollowerActionServer(Node):
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
+        self.get_logger().info(
+            f"Desired orientation: {goal_pose.pose.orientation.z, goal_pose.pose.orientation.w} and yaw: {yaw} rad"
+        )
+
         self.navigator.followWaypoints([goal_pose])  # send the goal to the navigator
 
         # while reaching the goal
@@ -134,7 +138,7 @@ class WaypointFollowerActionServer(Node):
         result = Wpfollow.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
-        result.direction = np.arctan2(
+        result.object_angle = np.arctan2(
             goal_pose.pose.position.y - self.utm_position[1],
             goal_pose.pose.position.x - self.utm_position[0],
         )
