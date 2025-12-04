@@ -1,17 +1,45 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
 
 def generate_launch_description():
-    ekf_config_path = os.path.join(
-        get_package_share_directory("amiga_localization"), "config", "amiga_ekf.yaml"
+
+    use_vectornav = LaunchConfiguration("use_vectornav")
+    gps_topic = LaunchConfiguration("gps_topic")
+
+    pkg_share = get_package_share_directory("amiga_localization")
+
+    base_ekf_config_path = os.path.join(pkg_share, "config", "base_ekf.yaml")
+    vectornav_ekf_config_path = os.path.join(pkg_share, "config", "vectornav_ekf.yaml")
+
+    ekf_config_path = PythonExpression(
+        [
+            "'",
+            vectornav_ekf_config_path,
+            "' if '",
+            use_vectornav,
+            "'.lower() == 'true' else '",
+            base_ekf_config_path,
+            "'",
+        ]
     )
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "use_vectornav",
+                default_value="false",
+                description="Use vectornav_ekf.yaml (true) or base_ekf.yaml (false)",
+            ),
+            DeclareLaunchArgument(
+                "gps_topic",
+                default_value="/gps/pvt",
+                description="GPS fix topic to remap to /gps/fix",
+            ),
             DeclareLaunchArgument("output_final_position", default_value="false"),
             DeclareLaunchArgument(
                 "output_location", default_value="~/dual_ekf_navsat_example_debug.txt"
@@ -40,12 +68,8 @@ def generate_launch_description():
                 parameters=[ekf_config_path],
                 remappings=[
                     # -- Inputs
-                    ("imu/data", "/oak1/imu/data"),
-                    ("gps/fix", "/ublox_gps_node/fix"),
                     ("odometry/filtered", "odometry/filtered/global"),
-                    # -- Outputs
-                    # ("gps/filtered", "gps/filtered"),
-                    # ("odometry/gps", "odometry/gps"),
+                    ("/gps/fix", gps_topic),
                 ],
             ),
         ]

@@ -1,5 +1,6 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -7,24 +8,11 @@ import os
 
 
 def generate_launch_description():
+    use_vectornav = LaunchConfiguration("use_vectornav")
+    gps_topic = LaunchConfiguration("gps_topic")
+
     launch_dir = os.path.join(
         get_package_share_directory("amiga_localization"), "launch"
-    )
-    bno085_config_params = os.path.join(
-        get_package_share_directory("amiga_localization"),
-        "config",
-        "bno085_params.yaml",
-    )
-
-    bno085_node = Node(
-        package="amiga_localization",
-        executable="bno085_node",
-        output="screen",
-        parameters=[bno085_config_params],
-    )
-
-    gps_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, "ublox.launch.py"))
     )
 
     wheel_odom_launch = IncludeLaunchDescription(
@@ -32,7 +20,26 @@ def generate_launch_description():
     )
 
     ekf_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, "ekf.launch.py"))
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, "ekf.launch.py")),
+        launch_arguments={
+            "use_vectornav": use_vectornav,
+            "gps_topic": gps_topic,
+        }.items(),
     )
 
-    return LaunchDescription([bno085_node, gps_launch, wheel_odom_launch, ekf_launch])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "use_vectornav",
+                default_value="false",
+                description="Use vectornav_ekf.yaml (true) or base_ekf.yaml (false)",
+            ),
+            DeclareLaunchArgument(
+                "gps_topic",
+                default_value="/gps/pvt",
+                description="GPS fix topic to remap to /gps/fix",
+            ),
+            wheel_odom_launch,
+            ekf_launch,
+        ]
+    )
