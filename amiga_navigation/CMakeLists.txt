@@ -27,6 +27,8 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(amiga_navigation_interfaces REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # Include directories
 include_directories(
@@ -88,10 +90,9 @@ install(DIRECTORY include/
 
 ament_python_install_package(${PROJECT_NAME})
 
+FILE(GLOB SCRIPTS scripts/*.py)
 install(PROGRAMS
-  scripts/joy_gps_waypoint_logger.py
-  scripts/waypoint_follower.py
-  scripts/gps_plotter.py
+  ${SCRIPTS}
   DESTINATION lib/${PROJECT_NAME}
 )
 

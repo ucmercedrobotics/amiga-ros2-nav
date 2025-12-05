@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Wpfollow.action"
   "action/NavigateViaLidar.action"
   "action/NavigateToPoseInFrame.action"
+  "action/FollowPerson.action"
   DEPENDENCIES geometry_msgs
 )
 
