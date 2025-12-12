@@ -26,8 +26,8 @@ class YOLOPersonFollower(Node):
         super().__init__("yolo_person_follower")
 
         self.declare_parameter("yolo_model", "yolo11n-pose.pt")
-        self.declare_parameter("camera_topic", "/camera/color/image_raw")
-        self.declare_parameter("depth_topic", "/camera/depth/image_raw")
+        self.declare_parameter("camera_topic", "/oak0/rgb/image_raw")
+        self.declare_parameter("depth_topic", "/oak0/stereo/image_raw")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("max_linear_velocity", 1.2)
         self.declare_parameter("max_angular_velocity", 1.0)
