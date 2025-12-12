@@ -307,7 +307,7 @@ class YOLOPersonFollower(Node):
 
         try:
             while rclpy.ok():
-                if goal_handle.is_cancel_requested():
+                if goal_handle.is_cancel_requested:
                     goal_handle.canceled()
                     result = FollowPerson.Result()
                     result.success = False
@@ -317,7 +317,7 @@ class YOLOPersonFollower(Node):
                     return result
 
                 with self.frame_lock:
-                    hand = bool(self.hand_raised)
+                    hand = self.hand_raised
 
                 if hand:
                     feedback.status = "hand_raised"
