@@ -137,24 +137,6 @@ class YOLOPersonFollower(Node):
         for result in results:
             boxes = result.boxes if result.boxes is not None else []
 
-            detected_labels = []
-            for box in boxes:
-                cls_id = int(box.cls)
-                conf = float(box.conf)
-
-                if isinstance(names, dict):
-                    cls_name = names.get(cls_id, str(cls_id))
-                elif isinstance(names, (list, tuple)) and cls_id < len(names):
-                    cls_name = names[cls_id]
-                else:
-                    cls_name = str(cls_id)
-
-                detected_labels.append(f"{cls_name} ({conf:.2f})")
-
-            self.get_logger().debug(
-                "Detections: " + (", ".join(detected_labels) if detected_labels else "none")
-            )
-
             if boxes:
                 for box in boxes:
                     if (
@@ -183,9 +165,6 @@ class YOLOPersonFollower(Node):
                                 person_center_x, person_distance
                             )
                         else:
-                            self.get_logger().info(
-                                "Hand raised detected - stopping robot"
-                            )
                             cmd_vel = Twist()
                         break
 
@@ -199,6 +178,10 @@ class YOLOPersonFollower(Node):
             self.get_logger().debug("Person detected - publishing cmd_vel")
 
         if self._active_goal:
+            if self.hand_raised:
+                self.get_logger().info(
+                                "Hand raised detected - stopping robot"
+                            )
             self.cmd_vel_pub.publish(cmd_vel)
 
     def get_person_distance(self, x1, y1, x2, y2):
