@@ -132,9 +132,31 @@ class YOLOPersonFollower(Node):
         person_detected = False
         self.hand_raised = False
 
+        names = getattr(self.model, "names", {})
+
         for result in results:
-            if result.boxes is not None:
-                for box in result.boxes:
+            boxes = result.boxes if result.boxes is not None else []
+
+            detected_labels = []
+            for box in boxes:
+                cls_id = int(box.cls)
+                conf = float(box.conf)
+
+                if isinstance(names, dict):
+                    cls_name = names.get(cls_id, str(cls_id))
+                elif isinstance(names, (list, tuple)) and cls_id < len(names):
+                    cls_name = names[cls_id]
+                else:
+                    cls_name = str(cls_id)
+
+                detected_labels.append(f"{cls_name} ({conf:.2f})")
+
+            self.get_logger().debug(
+                "Detections: " + (", ".join(detected_labels) if detected_labels else "none")
+            )
+
+            if boxes:
+                for box in boxes:
                     if (
                         int(box.cls) == PERSON_CLASS
                         and box.conf >= self.confidence_threshold
@@ -173,6 +195,8 @@ class YOLOPersonFollower(Node):
         if not person_detected:
             self.person_detected = False
             cmd_vel = Twist()
+        else:
+            self.get_logger().debug("Person detected - publishing cmd_vel")
 
         if self._active_goal:
             self.cmd_vel_pub.publish(cmd_vel)
@@ -225,6 +249,8 @@ class YOLOPersonFollower(Node):
                 else:
                     median_distance = np.median(valid_depths)
 
+                self.get_logger().debug(f"Person distance: {median_distance:.2f} meters")
+
                 return float(median_distance)
             except Exception as e:
                 self.get_logger().debug(f"Error calculating person distance: {str(e)}")
@@ -255,6 +281,10 @@ class YOLOPersonFollower(Node):
                     0.5 * distance_error,
                     -self.max_linear_vel,
                     self.max_linear_vel,
+                )
+
+                self.get_logger().debug(
+                    f"Distance to cover: {distance_error:.2f}, Linear Vel: {cmd_vel.linear.x:.2f}"
                 )
 
         return cmd_vel
@@ -334,7 +364,7 @@ class YOLOPersonFollower(Node):
                 feedback.status = status
                 goal_handle.publish_feedback(feedback)
 
-                time.sleep(0.1)
+                rclpy.spin_once(self, timeout_sec=0.1)
 
         except Exception as e:
             self.get_logger().error(f"Error in action execute: {e}")
