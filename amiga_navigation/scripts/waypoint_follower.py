@@ -12,7 +12,7 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
 
-from amiga_navigation_interfaces.action import Wpfollow  # type: ignore
+from amiga_navigation_interfaces.action import GPSWaypoint  # type: ignore
 
 
 class WaypointFollowerActionServer(Node):
@@ -51,7 +51,7 @@ class WaypointFollowerActionServer(Node):
         # create the action server to go to the desired position
         self._action_server_waypoint_follow = ActionServer(
             node=self,
-            action_type=Wpfollow,
+            action_type=GPSWaypoint,
             action_name="follow_gps_waypoints",
             execute_callback=self.goto_callback,
         )
@@ -79,13 +79,13 @@ class WaypointFollowerActionServer(Node):
         result is sent to the action client.
 
         Args:
-        goal_handle (Wpfollow): new waypoint to reach expressed in gps coordinates
+        goal_handle (GPSWaypoint): new waypoint to reach expressed in gps coordinates
         (provided by the action client)
 
         Returns:
-        result (Wpfollow.result): current gps position of the robot at goal reached
+        result (GPSWaypoint.result): current gps position of the robot at goal reached
         """
-        feedback_msg = Wpfollow.Feedback()
+        feedback_msg = GPSWaypoint.Feedback()
 
         self.get_logger().info(
             "going to: %f, %f" % (goal_handle.request.lat, goal_handle.request.lon)
@@ -135,7 +135,7 @@ class WaypointFollowerActionServer(Node):
         self.get_logger().info(f"Waypoint finished with: {self.navigator.getResult()}")
 
         # send result:
-        result = Wpfollow.Result()
+        result = GPSWaypoint.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
         result.object_angle = np.arctan2(
