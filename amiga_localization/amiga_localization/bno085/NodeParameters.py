@@ -24,7 +24,7 @@ class NodeParameters:
     ros2 run amiga_localization bno085
 
     with the following arguments:
-    --ros-args --params-file config/bno085_params.yaml
+    --ros-args --params-file install/amiga_localization/share/amiga_localization/config/bno085_params.yaml
     """
 
     def __init__(self, node: Node):
