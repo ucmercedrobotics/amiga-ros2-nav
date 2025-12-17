@@ -6,6 +6,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "tf2/utils.h"
 
 using namespace std::placeholders;
 
@@ -83,11 +84,7 @@ void NavigateToPoseInFrame::execute(
     return;
   }
 
-  double current_yaw = std::atan2(
-      2.0 *
-          (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
-      1.0 - 2.0 * (global_frame_pose_.orientation.z *
-                   global_frame_pose_.orientation.z));
+  double current_yaw = tf2::getYaw(global_frame_pose_.orientation);
 
   RCLCPP_INFO(this->get_logger(), "Global frame: x=%.2f, y=%.2f, yaw=%.2f rad",
               global_frame_pose_.position.x, global_frame_pose_.position.y,
@@ -166,11 +163,7 @@ void NavigateToPoseInFrame::feedback_callback(
   last_feedback_time_ = current_time;
 
   fb_->distance_remaining = static_cast<double>(feedback->distance_remaining);
-  double current_yaw = std::atan2(
-      2.0 *
-          (global_frame_pose_.orientation.w * global_frame_pose_.orientation.z),
-      1.0 - 2.0 * (global_frame_pose_.orientation.z *
-                   global_frame_pose_.orientation.z));
+  double current_yaw = tf2::getYaw(global_frame_pose_.orientation);
 
   auto normalize_angle = [](double angle) {
     while (angle > M_PI) angle -= 2.0 * M_PI;
