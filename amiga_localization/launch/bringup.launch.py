@@ -9,6 +9,7 @@ import os
 
 def generate_launch_description():
     use_vectornav = LaunchConfiguration("use_vectornav")
+    use_gps = LaunchConfiguration("use_gps")
     gps_topic = LaunchConfiguration("gps_topic")
 
     launch_dir = os.path.join(
@@ -23,6 +24,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(launch_dir, "ekf.launch.py")),
         launch_arguments={
             "use_vectornav": use_vectornav,
+            "use_gps": use_gps,
             "gps_topic": gps_topic,
         }.items(),
     )
@@ -33,6 +35,11 @@ def generate_launch_description():
                 "use_vectornav",
                 default_value="false",
                 description="Use vectornav_ekf.yaml (true) or base_ekf.yaml (false)",
+            ),
+            DeclareLaunchArgument(
+                "use_gps",
+                default_value="false",
+                description="Enable GPS/navsat_transform_node (true) or disable (false)",
             ),
             DeclareLaunchArgument(
                 "gps_topic",

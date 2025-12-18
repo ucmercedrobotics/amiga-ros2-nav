@@ -68,23 +68,37 @@ local_costmap:
       plugins: ["obstacle_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: false
+        enabled: true
         footprint_clearing_enabled: true
         combination_method: 1
         tf_filter_tolerance: 0.1
-        observation_sources: pointcloud_sensor
+        observation_sources: oak0_pointcloud oak1_pointcloud
 
-        pointcloud_sensor:
+        oak0_pointcloud:
+          topic: /oak0/points
+          data_type: PointCloud2
+          observation_persistence: 0.0
+          expected_update_rate: 5.0
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.5
+          marking: true
+          clearing: true
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.3
+          raytrace_max_range: 6.0
+          raytrace_min_range: 0.0
+
+        oak1_pointcloud:
           topic: /oak1/points
           data_type: PointCloud2
           observation_persistence: 0.0
           expected_update_rate: 5.0
           min_obstacle_height: 0.1
-          max_obstacle_height: 5.0
+          max_obstacle_height: 1.5
           marking: true
           clearing: true
           obstacle_max_range: 5.0
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.3
           raytrace_max_range: 6.0
           raytrace_min_range: 0.0
 
@@ -115,24 +129,38 @@ global_costmap:
       plugins: ["obstacle_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: false
+        enabled: true
         footprint_clearing_enabled: true
         combination_method: 1
         tf_filter_tolerance: 0.1
-        observation_sources: pointcloud_sensor
+        observation_sources: oak0_pointcloud oak1_pointcloud
 
-        pointcloud_sensor:
+        oak0_pointcloud:
+          topic: /oak0/points
+          data_type: PointCloud2
+          observation_persistence: 0.0
+          expected_update_rate: 2.5
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.5
+          marking: true
+          clearing: true
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.3
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.0
+
+        oak1_pointcloud:
           topic: /oak1/points
           data_type: PointCloud2
           observation_persistence: 0.0
           expected_update_rate: 2.5
-          min_obstacle_height: 0.0
-          max_obstacle_height: 2.0
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.5
           marking: true
           clearing: true
-          obstacle_max_range: 5.0
-          obstacle_min_range: 0.0
-          raytrace_max_range: 6.0
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.3
+          raytrace_max_range: 10.0
           raytrace_min_range: 0.0
 
 planner_server:

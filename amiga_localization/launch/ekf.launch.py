@@ -1,6 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -9,6 +10,7 @@ import os
 def generate_launch_description():
 
     use_vectornav = LaunchConfiguration("use_vectornav")
+    use_gps = LaunchConfiguration("use_gps")
     gps_topic = LaunchConfiguration("gps_topic")
 
     pkg_share = get_package_share_directory("amiga_localization")
@@ -36,6 +38,11 @@ def generate_launch_description():
                 description="Use vectornav_ekf.yaml (true) or base_ekf.yaml (false)",
             ),
             DeclareLaunchArgument(
+                "use_gps",
+                default_value="false",
+                description="Enable GPS/navsat_transform_node (true) or disable (false)",
+            ),
+            DeclareLaunchArgument(
                 "gps_topic",
                 default_value="/gps/pvt",
                 description="GPS fix topic to remap to /gps/fix",
@@ -60,6 +67,7 @@ def generate_launch_description():
                 parameters=[ekf_config_path],
                 remappings=[("odometry/filtered", "odometry/filtered/global")],
             ),
+            # GPS node - only launched if use_gps=true
             Node(
                 package="robot_localization",
                 executable="navsat_transform_node",
@@ -71,6 +79,7 @@ def generate_launch_description():
                     ("odometry/filtered", "odometry/filtered/global"),
                     ("/gps/fix", gps_topic),
                 ],
+                condition=IfCondition(use_gps),
             ),
         ]
     )
