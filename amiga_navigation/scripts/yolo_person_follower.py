@@ -3,8 +3,6 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -57,25 +55,12 @@ class YOLOPersonFollower(Node):
         self.model = YOLO(self.yolo_model)
         self.get_logger().info("YOLO model loaded successfully")
 
-        # Allow callbacks to run concurrently (image, depth, action)
-        self.vision_cb_group = ReentrantCallbackGroup()
-        self.depth_cb_group = ReentrantCallbackGroup()
-        self.action_cb_group = ReentrantCallbackGroup()
-
         self.cmd_vel_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.image_sub = self.create_subscription(
-            Image,
-            self.camera_topic,
-            self.image_callback,
-            10,
-            callback_group=self.vision_cb_group,
+            Image, self.camera_topic, self.image_callback, 10
         )
         self.depth_sub = self.create_subscription(
-            Image,
-            self.depth_topic,
-            self.depth_callback,
-            10,
-            callback_group=self.depth_cb_group,
+            Image, self.depth_topic, self.depth_callback, 10
         )
 
         self.bridge = CvBridge()
@@ -91,16 +76,6 @@ class YOLOPersonFollower(Node):
         self._active_goal = False
         self._current_goal_handle = None
 
-        # Control loop at camera rate (15 Hz) decoupled from callbacks
-        self.control_period = 1.0 / 15.0
-        self._goal_done_event = threading.Event()
-        self._pending_result = None
-        self.create_timer(
-            self.control_period,
-            self.control_timer_cb,
-            callback_group=self.action_cb_group,
-        )
-
         self._action_server = ActionServer(
             self,
             FollowPerson,
@@ -108,7 +83,6 @@ class YOLOPersonFollower(Node):
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
             cancel_callback=self.cancel_callback,
-            callback_group=self.action_cb_group,
         )
 
         self.get_logger().info("YOLO Person Follower node initialized")
@@ -341,25 +315,39 @@ class YOLOPersonFollower(Node):
         self.get_logger().info("FollowPerson goal started")
         self._active_goal = True
         self._current_goal_handle = goal_handle
-        self._pending_result = None
-        self._goal_done_event.clear()
+
+        feedback = FollowPerson.Feedback()
 
         try:
             while rclpy.ok():
-                if self._goal_done_event.wait(timeout=1.0):
-                    break
-
-                # If cancel comes in between timer ticks, handle it quickly
                 if goal_handle.is_cancel_requested:
                     goal_handle.canceled()
                     result = FollowPerson.Result()
                     result.success = False
                     result.message = "canceled"
-                    self._pending_result = result
                     self._active_goal = False
                     self._current_goal_handle = None
-                    self._goal_done_event.set()
-                    break
+                    return result
+
+                with self.frame_lock:
+                    hand = self.hand_raised
+
+                if hand:
+                    feedback.status = "hand_raised"
+                    goal_handle.publish_feedback(feedback)
+                    result = FollowPerson.Result()
+                    result.success = True
+                    result.message = "stopped_by_hand"
+                    goal_handle.succeed()
+                    self._active_goal = False
+                    self._current_goal_handle = None
+                    return result
+
+                status = "following" if self.person_detected else "no_person"
+                feedback.status = status
+                goal_handle.publish_feedback(feedback)
+
+                rclpy.spin_once(self, timeout_sec=0.05)
 
         except Exception as e:
             self.get_logger().error(f"Error in action execute: {e}")
@@ -374,68 +362,16 @@ class YOLOPersonFollower(Node):
                 pass
             return result
 
-        # Return whichever result the control loop decided, or a generic abort
-        if self._pending_result is not None:
-            return self._pending_result
-
-        result = FollowPerson.Result()
-        result.success = False
-        result.message = "aborted"
-        return result
-
-    def control_timer_cb(self):
-        if not self._active_goal or self._current_goal_handle is None:
-            return
-
-        goal_handle = self._current_goal_handle
-
-        # Handle cancel promptly
-        if goal_handle.is_cancel_requested:
-            goal_handle.canceled()
-            result = FollowPerson.Result()
-            result.success = False
-            result.message = "canceled"
-            self._pending_result = result
-            self._active_goal = False
-            self._current_goal_handle = None
-            self._goal_done_event.set()
-            return
-
-        with self.frame_lock:
-            hand = self.hand_raised
-            person_seen = self.person_detected
-
-        feedback = FollowPerson.Feedback()
-
-        if hand:
-            feedback.status = "hand_raised"
-            goal_handle.publish_feedback(feedback)
-            result = FollowPerson.Result()
-            result.success = True
-            result.message = "stopped_by_hand"
-            goal_handle.succeed()
-            self._pending_result = result
-            self._active_goal = False
-            self._current_goal_handle = None
-            self._goal_done_event.set()
-            return
-
-        feedback.status = "following" if person_seen else "no_person"
-        goal_handle.publish_feedback(feedback)
-
 
 def main(args=None):
     rclpy.init(args=args)
     node = YOLOPersonFollower()
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
 
     try:
-        executor.spin()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 
