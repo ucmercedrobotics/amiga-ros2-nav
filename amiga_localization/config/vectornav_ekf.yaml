@@ -150,8 +150,8 @@ navsat_transform_node:
 
         # TODO: Verify IMU data
         use_odometry_yaw: false
-        magnetic_declination_radians: 0.2193
-        yaw_offset: -0.5
+        magnetic_declination_radians: 0.0
+        yaw_offset: -1.5708
 
         zero_altitude: true
         publish_filtered_gps: true

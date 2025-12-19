@@ -38,7 +38,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "use_gps",
-                default_value="false",
+                default_value="true",
                 description="Enable GPS/navsat_transform_node (true) or disable (false)",
             ),
             DeclareLaunchArgument(

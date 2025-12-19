@@ -139,8 +139,8 @@ global_costmap:
           topic: /oak0/points
           data_type: PointCloud2
           observation_persistence: 0.0
-          expected_update_rate: 2.5
-          min_obstacle_height: 0.1
+          expected_update_rate: 5.0
+          min_obstacle_height: 0.5
           max_obstacle_height: 1.5
           marking: true
           clearing: true
@@ -153,8 +153,8 @@ global_costmap:
           topic: /oak1/points
           data_type: PointCloud2
           observation_persistence: 0.0
-          expected_update_rate: 2.5
-          min_obstacle_height: 0.1
+          expected_update_rate: 5.0
+          min_obstacle_height: 0.5
           max_obstacle_height: 1.5
           marking: true
           clearing: true
