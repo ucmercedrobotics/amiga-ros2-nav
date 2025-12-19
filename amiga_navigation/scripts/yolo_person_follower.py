@@ -347,7 +347,7 @@ class YOLOPersonFollower(Node):
                 feedback.status = status
                 goal_handle.publish_feedback(feedback)
 
-                rclpy.spin_once(self, timeout_sec=0.1)
+                rclpy.spin_once(self, timeout_sec=0.05)
 
         except Exception as e:
             self.get_logger().error(f"Error in action execute: {e}")

@@ -2,6 +2,7 @@
 import time
 import math
 import utm
+import json
 
 import numpy as np
 
@@ -12,7 +13,9 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
 
-from amiga_navigation_interfaces.action import Wpfollow  # type: ignore
+from amiga_navigation_interfaces.action import GPSWaypoint
+from amiga_navigation_interfaces.action import TreeIDWaypoint
+from amiga_interfaces.srv import GetTreeInfo
 
 
 class WaypointFollowerActionServer(Node):
@@ -25,22 +28,15 @@ class WaypointFollowerActionServer(Node):
         robot gps position)
 
         """
-        super().__init__("waypoint_follower")  # type: ignore
+        super().__init__("waypoint_follower")
 
         self.gps_position = []
         self.utm_position = []
 
-        # Nav2 default navigator
         self.navigator = BasicNavigator()
 
-        # Wait until the behavior tree is active, because we don't use a
-        # proper localizer such as AMCL
         self.navigator.waitUntilNav2Active(localizer="bt_navigator")
 
-        # create a subscription for current gnss location
-        # NOTE: this is needed only for the heading of the robot,
-        #       for that reason we are using the gps location alone
-        #        and not the output of the EKF
         self._gps_sub = self.create_subscription(
             msg_type=NavSatFix,
             topic="/gps/pvt",
@@ -48,15 +44,27 @@ class WaypointFollowerActionServer(Node):
             qos_profile=10,
         )
 
-        # create the action server to go to the desired position
         self._action_server_waypoint_follow = ActionServer(
             node=self,
-            action_type=Wpfollow,
+            action_type=GPSWaypoint,
             action_name="follow_gps_waypoints",
             execute_callback=self.goto_callback,
         )
 
-    def pose_cb(self, msg):  # save current location
+        self.declare_parameter("orchard_tree_service", "/orchard/get_tree_info")
+        service_name = (
+            self.get_parameter("orchard_tree_service").get_parameter_value().string_value
+        )
+        self._tree_info_client = self.create_client(GetTreeInfo, service_name)
+
+        self._action_server_treeid_follow = ActionServer(
+            node=self,
+            action_type=TreeIDWaypoint,
+            action_name="follow_tree_id_waypoint",
+            execute_callback=self.goto_treeid_callback,
+        )
+
+    def pose_cb(self, msg):
         """
         Method called each time a new robot gps position is received, it replace
         the old gps robot position (self.gps_position) with the update one.
@@ -79,37 +87,34 @@ class WaypointFollowerActionServer(Node):
         result is sent to the action client.
 
         Args:
-        goal_handle (Wpfollow): new waypoint to reach expressed in gps coordinates
+        goal_handle (GPSWaypoint): new waypoint to reach expressed in gps coordinates
         (provided by the action client)
 
         Returns:
-        result (Wpfollow.result): current gps position of the robot at goal reached
+        result (GPSWaypoint.result): current gps position of the robot at goal reached
         """
-        feedback_msg = Wpfollow.Feedback()
+        feedback_msg = GPSWaypoint.Feedback()
 
         self.get_logger().info(
             "going to: %f, %f" % (goal_handle.request.lat, goal_handle.request.lon)
-        )  # log the waypoint where we are going
+        )
         utm_coord = utm.from_latlon(
             goal_handle.request.lat, goal_handle.request.lon
-        )  # convert the waypoint in utm (note they are 4 numbers)
+        )
 
-        # compose the ROS message
-        # compute goal position:
         goal_pose = PoseStamped()
-        goal_pose.header.frame_id = "utm"  # Publishing the utm -> map transform, we can specify the goal directly in utm coordinates
+        goal_pose.header.frame_id = "utm"
         goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
         goal_pose.pose.position.x = utm_coord[0]
         goal_pose.pose.position.y = utm_coord[1]
 
-        # compute goal heading:
-        while self.utm_position == []:  # wait for the current gps location
+        while self.utm_position == []:
             self.get_logger().info("waiting for current location...")
             rclpy.spin_once(self)
 
         yaw = np.arctan2(
             utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
-        )  # compute heading among the next waypoint and the current position
+        )
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
@@ -117,31 +122,196 @@ class WaypointFollowerActionServer(Node):
             f"Desired orientation: {goal_pose.pose.orientation.z, goal_pose.pose.orientation.w} and yaw: {yaw} rad"
         )
 
-        self.navigator.followWaypoints([goal_pose])  # send the goal to the navigator
+        self.navigator.followWaypoints([goal_pose])
 
-        # while reaching the goal
         while not self.navigator.isTaskComplete():
-            # fill the feedback message
             feedback_msg.dist = math.dist(
                 [self.utm_position[0], self.utm_position[1]],
                 [goal_pose.pose.position.x, goal_pose.pose.position.y],
             )
             self.get_logger().info("distance to goal %f" % feedback_msg.dist)
-            goal_handle.publish_feedback(feedback_msg)  # send the feedback message
+            goal_handle.publish_feedback(feedback_msg)
             rclpy.spin_once(self, timeout_sec=0.5)
 
-        # at goal reached
         goal_handle.succeed()
         self.get_logger().info(f"Waypoint finished with: {self.navigator.getResult()}")
 
-        # send result:
-        result = Wpfollow.Result()
+        result = GPSWaypoint.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
         result.object_angle = np.arctan2(
             goal_pose.pose.position.y - self.utm_position[1],
             goal_pose.pose.position.x - self.utm_position[0],
         )
+        return result
+
+    def goto_treeid_callback(self, goal_handle):
+        """
+        Action callback for TreeIDWaypoint:
+        - Queries orchard management via GetTreeInfo for the tree location and row waypoints
+        - Chooses the closest row waypoint relative to current robot UTM position
+        - Navigates to that row waypoint using Nav2 and streams feedback
+
+        Args:
+        goal_handle (TreeIDWaypoint): request containing `tree_id`.
+
+        Returns:
+        result (TreeIDWaypoint.Result): current gps position at completion and object angle to target.
+        """
+        feedback_msg = TreeIDWaypoint.Feedback()
+
+        tree_id = int(goal_handle.request.tree_id)
+        self.get_logger().info(f"Received TreeID: {tree_id}")
+
+        while self.utm_position == []:
+            self.get_logger().info("waiting for current location...")
+            rclpy.spin_once(self)
+
+        if not self._tree_info_client.wait_for_service(timeout_sec=5.0):
+            self.get_logger().error("Orchard GetTreeInfo service unavailable")
+            goal_handle.abort()
+            result = TreeIDWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            result.object_angle = 0.0
+            return result
+
+        req = GetTreeInfo.Request()
+        req.index_type = GetTreeInfo.Request.TREE_INDEX
+        req.indicies = [tree_id]
+        req.fields = ["lat", "lon", "row_waypoints"]
+
+        future = self._tree_info_client.call_async(req)
+        while not future.done():
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        response = future.result()
+        if response is None or not hasattr(response, "json"):
+            self.get_logger().error("Invalid response from GetTreeInfo")
+            goal_handle.abort()
+            result = TreeIDWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            result.object_angle = 0.0
+            return result
+
+        try:
+            data = json.loads(response.json)
+        except Exception as e:
+            self.get_logger().error(f"Failed parsing GetTreeInfo JSON: {e}")
+            goal_handle.abort()
+            result = TreeIDWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            result.object_angle = 0.0
+            return result
+
+        record = None
+        if isinstance(data, list) and len(data) > 0:
+            record = data[0]
+        elif isinstance(data, dict):
+            record = data
+
+        if record is None:
+            self.get_logger().error("GetTreeInfo returned empty result")
+            goal_handle.abort()
+            result = TreeIDWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            result.object_angle = 0.0
+            return result
+
+        row_wps = record.get("row_waypoints", [])
+        tree_lat = record.get("lat", None)
+        tree_lon = record.get("lon", None)
+
+        def latlon_from_item(item):
+            if isinstance(item, dict):
+                lat = item.get("lat", None)
+                lon = item.get("lon", None)
+                if lat is not None and lon is not None:
+                    return float(lat), float(lon)
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                return float(item[0]), float(item[1])
+            return None
+
+        candidate_latlon = None
+        candidate_utm = None
+
+        if isinstance(row_wps, list) and len(row_wps) > 0:
+            min_dist = float("inf")
+            for item in row_wps:
+                ll = latlon_from_item(item)
+                if ll is None:
+                    continue
+                utm_wp = utm.from_latlon(ll[0], ll[1])
+                d = math.dist([self.utm_position[0], self.utm_position[1]], [utm_wp[0], utm_wp[1]])
+                if d < min_dist:
+                    min_dist = d
+                    candidate_latlon = ll
+                    candidate_utm = utm_wp
+
+        if candidate_latlon is None or candidate_utm is None:
+            self.get_logger().error("No valid target waypoint available from orchard data")
+            goal_handle.abort()
+            result = TreeIDWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            result.object_angle = 0.0
+            return result
+
+        tree_utm = None
+        if tree_lat is not None and tree_lon is not None:
+            try:
+                tree_utm = utm.from_latlon(float(tree_lat), float(tree_lon))
+            except Exception as exc:
+                self.get_logger().warn(f"Failed to convert tree lat/lon to UTM: {exc}")
+
+        self.get_logger().info(
+            f"Navigating to row waypoint near tree {tree_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
+        )
+
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = "utm"
+        goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        goal_pose.pose.position.x = candidate_utm[0]
+        goal_pose.pose.position.y = candidate_utm[1]
+
+        yaw = np.arctan2(
+            candidate_utm[1] - self.utm_position[1], candidate_utm[0] - self.utm_position[0]
+        )
+        goal_pose.pose.orientation.w = np.cos(yaw / 2)
+        goal_pose.pose.orientation.z = np.sin(yaw / 2)
+
+        self.get_logger().info(
+            f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
+        )
+
+        self.navigator.followWaypoints([goal_pose])
+
+        while not self.navigator.isTaskComplete():
+            feedback_msg.dist = math.dist(
+                [self.utm_position[0], self.utm_position[1]],
+                [goal_pose.pose.position.x, goal_pose.pose.position.y],
+            )
+            self.get_logger().info("distance to goal %f" % feedback_msg.dist)
+            goal_handle.publish_feedback(feedback_msg)
+            rclpy.spin_once(self, timeout_sec=0.5)
+
+        goal_handle.succeed()
+        self.get_logger().info(f"TreeID waypoint finished with: {self.navigator.getResult()}")
+
+        result = TreeIDWaypoint.Result()
+        result.lat = self.gps_position[0]
+        result.lon = self.gps_position[1]
+        if tree_utm is not None:
+            result.object_angle = np.arctan2(
+                tree_utm[1] - self.utm_position[1],
+                tree_utm[0] - self.utm_position[0],
+            )
+        else:
+            self.get_logger().warn("Tree lat/lon unavailable; object_angle set to 0")
+            result.object_angle = 0.0
         return result
 
 

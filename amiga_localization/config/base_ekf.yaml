@@ -35,7 +35,7 @@ ekf_local_filter_node:
 
 
     # -- Oak0 Imu
-    imu0: /bno085/imu/data
+    imu0: /bno085/imu
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,

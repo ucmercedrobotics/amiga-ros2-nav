@@ -11,10 +11,11 @@ find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/Wpfollow.action"
+  "action/GPSWaypoint.action"
   "action/NavigateViaLidar.action"
   "action/NavigateToPoseInFrame.action"
   "action/FollowPerson.action"
+  "action/TreeIDWaypoint.action"
   DEPENDENCIES geometry_msgs
 )
 
