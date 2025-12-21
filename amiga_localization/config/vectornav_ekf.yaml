@@ -151,13 +151,13 @@ navsat_transform_node:
         # TODO: Verify IMU data
         use_odometry_yaw: false
         magnetic_declination_radians: 0.0
-        yaw_offset: -1.5708
+        yaw_offset: 1.5708
 
         zero_altitude: true
         publish_filtered_gps: true
 
         wait_for_datum: true
         # Users can specify the origin manually
-        datum: [37.3611, -120.4322, 0.0]
+        datum: [37.374, -120.578, 60.89]
         broadcast_cartesian_transform: true
         broadcast_cartesian_transform_as_parent_frame: true
