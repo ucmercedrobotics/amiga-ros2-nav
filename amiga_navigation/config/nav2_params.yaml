@@ -77,7 +77,7 @@ local_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          observation_persistence: 0.0
+          observation_persistence: 5.0   # <--- not tested
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 1.0
@@ -91,7 +91,7 @@ local_costmap:
         oak1_pointcloud:
           topic: /oak1/points
           data_type: PointCloud2
-          observation_persistence: 0.0
+          observation_persistence: 5.0   # <---
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 1.0
@@ -138,7 +138,7 @@ global_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          observation_persistence: 0.0
+          observation_persistence: 10.0  # <---
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 1.0
@@ -152,7 +152,7 @@ global_costmap:
         oak1_pointcloud:
           topic: /oak1/points
           data_type: PointCloud2
-          observation_persistence: 0.0
+          observation_persistence: 10.0  # <---
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 1.0
