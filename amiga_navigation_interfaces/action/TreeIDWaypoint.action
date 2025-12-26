@@ -3,6 +3,5 @@ bool approach_tree
 ---
 float64 lat
 float64 lon
-float64 object_angle
 ---
 float64 dist
