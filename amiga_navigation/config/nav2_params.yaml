@@ -72,7 +72,7 @@ local_costmap:
         footprint_clearing_enabled: true
         combination_method: 1
         tf_filter_tolerance: 0.1
-        observation_sources: oak0_pointcloud oak1_pointcloud
+        observation_sources: oak0_pointcloud
 
         oak0_pointcloud:
           topic: /oak0/points
@@ -133,7 +133,7 @@ global_costmap:
         footprint_clearing_enabled: true
         combination_method: 1
         tf_filter_tolerance: 0.1
-        observation_sources: oak0_pointcloud oak1_pointcloud
+        observation_sources: oak0_pointcloud
 
         oak0_pointcloud:
           topic: /oak0/points
