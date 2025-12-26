@@ -139,10 +139,6 @@ class WaypointFollowerActionServer(Node):
         result = GPSWaypoint.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
-        result.object_angle = np.arctan2(
-            goal_pose.pose.position.y - self.utm_position[1],
-            goal_pose.pose.position.x - self.utm_position[0],
-        )
         return result
 
     def goto_treeid_callback(self, goal_handle):
@@ -153,7 +149,7 @@ class WaypointFollowerActionServer(Node):
         - Navigates to that row waypoint using Nav2 and streams feedback
 
         Args:
-        goal_handle (TreeIDWaypoint): request containing `tree_id`.
+        goal_handle (TreeIDWaypoint): request containing `tree_id` and `approach_tree`.
 
         Returns:
         result (TreeIDWaypoint.Result): current gps position at completion and object angle to target.
@@ -161,6 +157,8 @@ class WaypointFollowerActionServer(Node):
         feedback_msg = TreeIDWaypoint.Feedback()
 
         tree_id = int(goal_handle.request.tree_id)
+        # because this actually takes you to the row waypoint near the tree, you can choose to approach the tree or not
+        approach_tree = goal_handle.request.approach_tree
         self.get_logger().info(f"Received TreeID: {tree_id}")
 
         while self.utm_position == []:
