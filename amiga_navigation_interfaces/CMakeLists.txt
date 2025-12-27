@@ -15,10 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/NavigateViaLidar.action"
   "action/NavigateToPoseInFrame.action"
   "action/FollowPerson.action"
-<<<<<<< HEAD
   "action/TreeIDWaypoint.action"
-=======
->>>>>>> 194c1ba (adding follow person node)
   DEPENDENCIES geometry_msgs
 )
 
