@@ -60,6 +60,9 @@ ament_target_dependencies(navigate_to_pose_in_frame
   nav2_msgs
   geometry_msgs
   nav_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 add_executable(linear_velo

@@ -6,7 +6,6 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-import cv2
 import numpy as np
 from ultralytics import YOLO
 import threading
