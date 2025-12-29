@@ -7,7 +7,7 @@ import json
 import numpy as np
 
 import rclpy
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, ActionClient
 from rclpy.node import Node
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
@@ -38,7 +38,7 @@ class WaypointFollowerActionServer(Node):
 
         self._gps_sub = self.create_subscription(
             msg_type=NavSatFix,
-            topic="/gps/pvt",
+            topic="/gps/filtered",
             callback=self.pose_cb,
             qos_profile=10,
         )
@@ -63,8 +63,10 @@ class WaypointFollowerActionServer(Node):
             execute_callback=self.goto_treeid_callback,
         )
 
-        self._navigate_via_lidar_service = self.create_client(
-            NavigateViaLidar, "/navigate_via_lidar"
+        self._navigate_via_lidar_client = ActionClient(
+            node=self,
+            action_type=NavigateViaLidar,
+            action_name="/navigate_via_lidar"
         )
 
     def pose_cb(self, msg):
@@ -301,16 +303,27 @@ class WaypointFollowerActionServer(Node):
         
         if approach_tree: 
             self.get_logger().info("Approaching tree via LIDAR navigation")
-            while not self._navigate_via_lidar_service.wait_for_service(timeout_sec=5.0):
-                self.get_logger().info("Waiting for NavigateViaLidar service...")
-            nav_req = NavigateViaLidar.Request()
-            nav_req.target_angle = object_angle
-            future = self._navigate_via_lidar_service.call_async(nav_req)
+            while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
+                self.get_logger().info("Waiting for NavigateViaLidar action server...")
+            nav_goal = NavigateViaLidar.Goal()
+            nav_goal.target_angle = object_angle
+            future = self._navigate_via_lidar_client.send_goal_async(nav_goal)
             while not future.done():
                 rclpy.spin_once(self, timeout_sec=0.1)
-            nav_response = future.result()
-            if nav_response is None or not nav_response.success:
-                self.get_logger().error("NavigateViaLidar service call failed")
+            goal_handle_nav = future.result()
+            if not goal_handle_nav.accepted:
+                self.get_logger().error("NavigateViaLidar action goal rejected")
+                goal_handle.abort()
+                result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+                result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+                return result
+            
+            result_future = goal_handle_nav.get_result_async()
+            while not result_future.done():
+                rclpy.spin_once(self, timeout_sec=0.1)
+            nav_result = result_future.result()
+            if nav_result is None or not nav_result.result.success:
+                self.get_logger().error("NavigateViaLidar action failed")
                 goal_handle.abort()
                 result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
                 result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
