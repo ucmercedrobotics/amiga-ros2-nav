@@ -56,10 +56,10 @@ class YOLOPersonFollower(Node):
 
         self.cmd_vel_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.image_sub = self.create_subscription(
-            Image, self.camera_topic, self.image_callback, 10
+            Image, self.camera_topic, self.image_callback, 1
         )
         self.depth_sub = self.create_subscription(
-            Image, self.depth_topic, self.depth_callback, 10
+            Image, self.depth_topic, self.depth_callback, 1
         )
 
         self.bridge = CvBridge()
@@ -346,7 +346,7 @@ class YOLOPersonFollower(Node):
                 feedback.status = status
                 goal_handle.publish_feedback(feedback)
 
-                rclpy.spin_once(self, timeout_sec=0.05)
+                rclpy.spin_once(self, timeout_sec=0.01)
 
         except Exception as e:
             self.get_logger().error(f"Error in action execute: {e}")
