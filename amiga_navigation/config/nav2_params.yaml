@@ -66,14 +66,13 @@ local_costmap:
           topic: /oak0/points
           data_type: PointCloud2
           transport_type: "draco"
-          observation_persistence: 5.0
-          expected_update_rate: 1.0
+          expected_update_rate: 5.0
           min_obstacle_height: 0.3
-          max_obstacle_height: 1.5
+          max_obstacle_height: 2.0
           marking: true
           clearing: true
-          obstacle_max_range: 5.0
-          obstacle_min_range: 0.3
+          obstacle_max_range: 7.0
+          obstacle_min_range: 2.0
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
       inflation_layer:
@@ -89,8 +88,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       rolling_window: true
-      width: 25
-      height: 25
+      width: 50
+      height: 50
       footprint: "[ [-0.5335, 0.686], [0.5335, 0.686], [0.5335, -0.686], [-0.5335, -0.686] ]"
       # no static map
       plugins: ["obstacle_layer", "inflation_layer"]
@@ -102,14 +101,13 @@ global_costmap:
           topic: /oak0/points
           data_type: PointCloud2
           transport_type: "draco"
-          observation_persistence: 5.0
-          expected_update_rate: 1.0
+          expected_update_rate: 5.0
           min_obstacle_height: 0.3
-          max_obstacle_height: 1.5
+          max_obstacle_height: 2.0
           marking: true
           clearing: true
-          obstacle_max_range: 5.0
-          obstacle_min_range: 0.3
+          obstacle_max_range: 7.0
+          obstacle_min_range: 2.0
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
       inflation_layer:
@@ -123,21 +121,5 @@ planner_server:
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
       tolerance: 0.5
-      use_astar: true
+      use_astar: false
       allow_unknown: true
-
-velocity_smoother:
-  ros__parameters:
-    smoothing_frequency: 10.0
-    scale_velocities: false
-    feedback: "OPEN_LOOP"
-    max_velocity: [0.3, 0.0, 1.5]
-    min_velocity: [-0.3, 0.0, -1.5]
-    deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
-    max_accel: [2.5, 0.0, 3.2]
-    max_decel: [-2.5, 0.0, -3.2]
-    odom_topic: "odom"
-    odom_duration: 0.1
-    use_realtime_priority: false
-    enable_stamped_cmd_vel: false

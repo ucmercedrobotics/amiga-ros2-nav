@@ -84,7 +84,7 @@ navsat_transform_node:
 
         use_odometry_yaw: false
         magnetic_declination_radians: 0.2193
-        yaw_offset: -0.4
+        yaw_offset: -0.5
 
         publish_filtered_gps: true
 

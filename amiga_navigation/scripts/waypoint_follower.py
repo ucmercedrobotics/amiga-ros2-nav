@@ -306,7 +306,7 @@ class WaypointFollowerActionServer(Node):
             while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
                 self.get_logger().info("Waiting for NavigateViaLidar action server...")
             nav_goal = NavigateViaLidar.Goal()
-            nav_goal.target_angle = object_angle
+            nav_goal.object_angle = object_angle
             future = self._navigate_via_lidar_client.send_goal_async(nav_goal)
             while not future.done():
                 rclpy.spin_once(self, timeout_sec=0.1)
