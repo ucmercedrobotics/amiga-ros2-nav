@@ -43,7 +43,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "gps_topic",
-                default_value="/gps/pvt",
+                default_value="/ublox_gps_node/fix",
                 description="GPS fix topic to remap to /gps/fix",
             ),
             wheel_odom_launch,

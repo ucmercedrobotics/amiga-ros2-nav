@@ -72,6 +72,7 @@ void LidarObjectNavigator::execute(
     RCLCPP_WARN(this->get_logger(), "No LiDAR data available yet.");
     return;
   }
+  active_goal_handle_ = goal_handle;
 
   auto result = std::make_shared<NavigateViaLidar::Result>();
   double theta_target = goal_handle->get_goal()->object_angle;
