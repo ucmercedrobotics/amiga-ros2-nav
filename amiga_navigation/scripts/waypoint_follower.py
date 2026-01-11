@@ -10,8 +10,9 @@ import rclpy
 from rclpy.action import ActionServer, ActionClient
 from rclpy.node import Node
 from nav2_simple_commander.robot_navigator import BasicNavigator
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from sensor_msgs.msg import NavSatFix
+from tf_transformations import euler_from_quaternion
 
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
 from amiga_interfaces.srv import GetTreeInfo
@@ -31,6 +32,7 @@ class WaypointFollowerActionServer(Node):
 
         self.gps_position = []
         self.utm_position = []
+        self.robot_yaw_world = 0.0
 
         self.navigator = BasicNavigator()
 
@@ -41,6 +43,13 @@ class WaypointFollowerActionServer(Node):
             topic="/gps/filtered",
             callback=self.pose_cb,
             qos_profile=10,
+        )
+
+        self._robot_pose_sub = self.create_subscription(
+            msg_type=PoseWithCovarianceStamped,
+            topic="/odom/filtered/local",
+            callback=self.robot_pose_cb,
+            qos_profile=1,
         )
 
         self._action_server_waypoint_follow = ActionServer(
@@ -80,6 +89,19 @@ class WaypointFollowerActionServer(Node):
         """
         self.gps_position = (msg.latitude, msg.longitude)
         self.utm_position = utm.from_latlon(self.gps_position[0], self.gps_position[1])
+
+    def robot_pose_cb(self, msg):
+        """
+        Method called each time a new robot pose is received, it extracts
+        the robot's yaw (heading) in world frame from the pose quaternion.
+
+        Args:
+        msg (PoseWithCovarianceStamped): message received
+        """
+        quaternion = msg.pose.pose.orientation
+        quaternion_list = [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+        _, _, yaw = euler_from_quaternion(quaternion_list)
+        self.robot_yaw_world = yaw
 
     def goto_callback(self, goal_handle):
         """
@@ -300,6 +322,13 @@ class WaypointFollowerActionServer(Node):
             )
         else:
             self.get_logger().warn("Tree lat/lon unavailable; object_angle set to 0")
+
+        theta_robot = self.robot_yaw_world
+
+        object_angle = np.arctan2(
+            np.sin(object_angle - theta_robot),
+            np.cos(object_angle - theta_robot),
+        )
         
         if approach_tree: 
             self.get_logger().info("Approaching tree via LIDAR navigation")
