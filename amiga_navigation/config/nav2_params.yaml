@@ -114,7 +114,7 @@ global_costmap:
 
 planner_server:
   ros__parameters:
-    planner_plugins: ["ThetaStar"]
-    ThetaStar:
+    planner_plugins: ["GridBased"]
+    GridBased:
       plugin: "nav2_theta_star_planner/ThetaStarPlanner"
       allow_unknown: true
