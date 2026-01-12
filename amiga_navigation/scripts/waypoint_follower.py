@@ -10,8 +10,9 @@ import rclpy
 from rclpy.action import ActionServer, ActionClient
 from rclpy.node import Node
 from nav2_simple_commander.robot_navigator import BasicNavigator
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
+from nav_msgs.msg import Odometry
 from tf_transformations import euler_from_quaternion
 
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
@@ -46,8 +47,8 @@ class WaypointFollowerActionServer(Node):
         )
 
         self._robot_pose_sub = self.create_subscription(
-            msg_type=PoseWithCovarianceStamped,
-            topic="/odom/filtered/local",
+            msg_type=Odometry,
+            topic="/odometry/filtered/local",
             callback=self.robot_pose_cb,
             qos_profile=1,
         )
@@ -324,14 +325,12 @@ class WaypointFollowerActionServer(Node):
             self.get_logger().warn("Tree lat/lon unavailable; object_angle set to 0")
 
         theta_robot = self.robot_yaw_world
+        self.get_logger().info(f"Approaching tree via LIDAR navigation at absolute angle {object_angle} facing {theta_robot}")
 
-        object_angle = np.arctan2(
-            np.sin(object_angle - theta_robot),
-            np.cos(object_angle - theta_robot),
-        )
+        object_angle = object_angle - theta_robot
         
         if approach_tree: 
-            self.get_logger().info("Approaching tree via LIDAR navigation")
+            self.get_logger().info(f"Approaching tree via LIDAR navigation at relative angle {object_angle}")
             while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
                 self.get_logger().info("Waiting for NavigateViaLidar action server...")
             nav_goal = NavigateViaLidar.Goal()

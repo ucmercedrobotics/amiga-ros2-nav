@@ -65,7 +65,6 @@ local_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          transport_type: "draco"
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 2.0
@@ -77,8 +76,8 @@ local_costmap:
           raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 10.0
-        inflation_radius: 0.4
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.2
 
 global_costmap:
   global_costmap:
@@ -88,8 +87,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       rolling_window: true
-      width: 50
-      height: 50
+      width: 75
+      height: 75
       footprint: "[ [-0.5335, 0.686], [0.5335, 0.686], [0.5335, -0.686], [-0.5335, -0.686] ]"
       # no static map
       plugins: ["obstacle_layer", "inflation_layer"]
@@ -100,7 +99,6 @@ global_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          transport_type: "draco"
           expected_update_rate: 5.0
           min_obstacle_height: 0.3
           max_obstacle_height: 2.0
