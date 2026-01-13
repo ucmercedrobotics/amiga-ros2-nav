@@ -32,8 +32,8 @@ controller_server:
     general_goal_checker:
       stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.9
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.5
+      yaw_goal_tolerance: 0.3
     FollowPath:
       plugin: "nav2_rotation_shim_controller::RotationShimController"
       primary_controller: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
@@ -55,7 +55,7 @@ local_costmap:
       rolling_window: true
       width: 7
       height: 7
-      footprint: "[ [-0.5335, 0.686], [0.5335, 0.686], [0.5335, -0.686], [-0.5335, -0.686] ]"
+      footprint: "[ [-0.57, 0.7], [0.57, 0.7], [0.57, -0.7], [-0.57, -0.7] ]"
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -64,7 +64,7 @@ local_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          expected_update_rate: 5.0
+          expected_update_rate: 1.0
           min_obstacle_height: 0.3
           max_obstacle_height: 2.0
           marking: true
@@ -75,8 +75,8 @@ local_costmap:
           raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 7.0
+        inflation_radius: 0.4
 
 global_costmap:
   global_costmap:
@@ -88,7 +88,7 @@ global_costmap:
       rolling_window: true
       width: 100
       height: 100
-      footprint: "[ [-0.5335, 0.686], [0.5335, 0.686], [0.5335, -0.686], [-0.5335, -0.686] ]"
+      footprint: "[ [-0.57, 0.7], [0.57, 0.7], [0.57, -0.7], [-0.57, -0.7] ]"
       # no static map
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
@@ -98,7 +98,7 @@ global_costmap:
         oak0_pointcloud:
           topic: /oak0/points
           data_type: PointCloud2
-          expected_update_rate: 5.0
+          expected_update_rate: 1.0
           min_obstacle_height: 0.3
           max_obstacle_height: 2.0
           marking: true
@@ -109,8 +109,8 @@ global_costmap:
           raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 7.0
+        inflation_radius: 0.4
 
 planner_server:
   ros__parameters:
