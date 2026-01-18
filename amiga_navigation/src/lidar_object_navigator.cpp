@@ -114,7 +114,6 @@ void LidarObjectNavigator::execute(
               "Found %zu points near %.2f rad. Height range: [%.2f, %.2f] m",
               selected_points.size(), theta_target, MIN_OBJECT_HEIGHT, MAX_OBJECT_HEIGHT);
 
-  // Find the closest point in the selected set
   float min_distance = std::numeric_limits<float>::max();
   size_t closest_idx = 0;
   for (size_t i = 0; i < selected_points.size(); ++i) {
