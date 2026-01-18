@@ -9,9 +9,10 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
 #define SAFETY_DISTANCE 0.75f
-#define AZIMUTH_TOLERANCE 0.0175f
+#define AZIMUTH_TOLERANCE 0.5f  // ~28.6 degrees for broader canopy scanning
 #define MIN_OBJECT_HEIGHT 1.0f
 #define MAX_OBJECT_HEIGHT 1.5f
+#define MAX_OBJECT_DISTANCE 3.0f  // Maximum distance to consider an object
 
 namespace amiga_navigation {
 
