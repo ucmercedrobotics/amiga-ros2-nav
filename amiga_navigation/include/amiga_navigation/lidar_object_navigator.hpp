@@ -12,7 +12,7 @@
 #define AZIMUTH_TOLERANCE 0.5f  // ~28.6 degrees
 #define MIN_OBJECT_HEIGHT 1.0f
 #define MAX_OBJECT_HEIGHT 1.5f
-#define MAX_OBJECT_DISTANCE 3.0f
+#define MAX_OBJECT_DISTANCE 5.0f
 
 namespace amiga_navigation {
 
