@@ -1,6 +1,7 @@
 #include "amiga_navigation/lidar_object_navigator.hpp"
 
 #include <cmath>
+#include <limits>
 #include <Eigen/Dense>
 
 #include "rclcpp/rclcpp.hpp"
@@ -113,10 +114,26 @@ void LidarObjectNavigator::execute(
               "Found %zu points near %.2f rad. Height range: [%.2f, %.2f] m",
               selected_points.size(), theta_target, MIN_OBJECT_HEIGHT, MAX_OBJECT_HEIGHT);
 
-  // TODO: be more intelligent about which point to choose
-  x = selected_points[0](0);
-  y = selected_points[0](1);
-  z = selected_points[0](2);
+  float min_distance = std::numeric_limits<float>::max();
+  size_t closest_idx = 0;
+  for (size_t i = 0; i < selected_points.size(); ++i) {
+    float dist = std::sqrt(selected_points[i](0) * selected_points[i](0) +
+                          selected_points[i](1) * selected_points[i](1));
+    if (dist < MAX_OBJECT_DISTANCE && dist < min_distance) {
+      min_distance = dist;
+      closest_idx = i;
+    }
+  }
+  
+  if (min_distance >= std::numeric_limits<float>::max()) {
+    RCLCPP_WARN(this->get_logger(), 
+                "No points found within maximum distance of %.2f m", MAX_OBJECT_DISTANCE);
+    return;
+  }
+  
+  x = selected_points[closest_idx](0);
+  y = selected_points[closest_idx](1);
+  z = selected_points[closest_idx](2);
 
   // TODO: we need to convert this into base frame coordinates, not sensor
   float ground_distance = std::sqrt(x * x + y * y);

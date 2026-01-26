@@ -90,6 +90,10 @@ navsat_transform_node:
 
         wait_for_datum: true
         # Users can specify the origin manually
-        datum: [37.3611, -120.4322, 0.0]
+        # UCM
+        datum: [37.3739547,-120.5780044, 0.0]
+        # Shiraz Ranch
+        # datum: [37.353876320563835, -121.11071526574209, 0.0]
+
         broadcast_cartesian_transform: true
         broadcast_cartesian_transform_as_parent_frame: true
