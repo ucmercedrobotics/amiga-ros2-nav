@@ -64,8 +64,6 @@ class LidarObjectNavigator : public rclcpp::Node {
   rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
 
     sensor_msgs::msg::PointCloud2::SharedPtr latest_scan_;
-    tf2_ros::Buffer tf_buffer_;
-    tf2_ros::TransformListener tf_listener_;
     std::string base_frame_;
     float safety_distance_;
     float lidar_offset_distance_;

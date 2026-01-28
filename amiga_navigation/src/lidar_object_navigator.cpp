@@ -8,8 +8,6 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
-#include "tf2/exceptions.h"
-#include "tf2/time.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 
@@ -18,9 +16,7 @@ using namespace std::placeholders;
 namespace amiga_navigation {
 
 LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
-    : Node("lidar_object_navigator", options),
-      tf_buffer_(this->get_clock()),
-      tf_listener_(tf_buffer_) {
+    : Node("lidar_object_navigator", options) {
   this->declare_parameter<std::string>("lidar_topic", "/ouster/points");
   this->declare_parameter<std::string>("base_frame", "base_link");
   this->declare_parameter<double>("safety_distance", 1.0);
