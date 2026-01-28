@@ -3,16 +3,19 @@
 #include "amiga_navigation_interfaces/action/navigate_to_pose_in_frame.hpp"
 #include "amiga_navigation_interfaces/action/navigate_via_lidar.hpp"
 #include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/point_stamped.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
-#define SAFETY_DISTANCE 0.75f
 #define AZIMUTH_TOLERANCE 0.5f  // ~28.6 degrees
 #define MIN_OBJECT_HEIGHT 1.0f
 #define MAX_OBJECT_HEIGHT 1.5f
-#define MAX_OBJECT_DISTANCE 5.0f
+#define MAX_OBJECT_DISTANCE 7.0f
 
 namespace amiga_navigation {
 
@@ -32,6 +35,7 @@ class LidarObjectNavigator : public rclcpp::Node {
 
  private:
     void lidar_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
+    void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
   // Action server callbacks
   rclcpp_action::GoalResponse handle_goal(
@@ -54,11 +58,18 @@ class LidarObjectNavigator : public rclcpp::Node {
       const GoalHandleNavigateToPoseInFrame::WrappedResult& result);
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp_action::Client<NavigateToPoseInFrameAction>::SharedPtr
       navigate_to_pose_in_frame_client_;
   rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
 
     sensor_msgs::msg::PointCloud2::SharedPtr latest_scan_;
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tf_listener_;
+    std::string base_frame_;
+    float safety_distance_;
+    float lidar_offset_distance_;
+    float current_yaw_ = 0.0f;
 
   std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
 };

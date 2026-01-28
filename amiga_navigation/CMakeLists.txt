@@ -47,6 +47,9 @@ ament_target_dependencies(lidar_object_navigator
   sensor_msgs
   geometry_msgs
   Eigen3
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 add_executable(navigate_to_pose_in_frame

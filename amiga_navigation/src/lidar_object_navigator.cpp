@@ -8,20 +8,36 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
+#include "tf2/exceptions.h"
+#include "tf2/time.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/LinearMath/Quaternion.h"
 
 using namespace std::placeholders;
 
 namespace amiga_navigation {
 
 LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
-    : Node("lidar_object_navigator", options) {
+    : Node("lidar_object_navigator", options),
+      tf_buffer_(this->get_clock()),
+      tf_listener_(tf_buffer_) {
   this->declare_parameter<std::string>("lidar_topic", "/ouster/points");
+  this->declare_parameter<std::string>("base_frame", "base_link");
+  this->declare_parameter<double>("safety_distance", 1.0);
+  this->declare_parameter<double>("lidar_offset_distance", 0.65);
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
+  base_frame_ = this->get_parameter("base_frame").as_string();
+  safety_distance_ = this->get_parameter("safety_distance").as_double();
+  lidar_offset_distance_ = this->get_parameter("lidar_offset_distance").as_double();
 
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
   lidar_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     lidar_topic, qos,
     std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
+
+  odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+    "/odometry/filtered/local", qos,
+    std::bind(&LidarObjectNavigator::odom_callback, this, _1));
 
   navigate_to_pose_in_frame_client_ =
       rclcpp_action::create_client<NavigateToPoseInFrameAction>(
@@ -42,6 +58,21 @@ void LidarObjectNavigator::lidar_callback(
   RCLCPP_DEBUG(this->get_logger(), "Received PointCloud2 with %zu points",
                point_count);
   latest_scan_ = msg;
+}
+
+void LidarObjectNavigator::odom_callback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
+  // Extract yaw from quaternion
+  tf2::Quaternion q(
+    msg->pose.pose.orientation.x,
+    msg->pose.pose.orientation.y,
+    msg->pose.pose.orientation.z,
+    msg->pose.pose.orientation.w
+  );
+  tf2::Matrix3x3 m(q);
+  double roll, pitch, yaw;
+  m.getRPY(roll, pitch, yaw);
+  current_yaw_ = static_cast<float>(yaw);
 }
 
 rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
@@ -135,15 +166,22 @@ void LidarObjectNavigator::execute(
   y = selected_points[closest_idx](1);
   z = selected_points[closest_idx](2);
 
-  // TODO: we need to convert this into base frame coordinates, not sensor
-  float ground_distance = std::sqrt(x * x + y * y);
+  // Apply manual offset with heading correction: lidar offset to the left
+  float offset_x = -lidar_offset_distance_ * std::sin(current_yaw_);
+  float offset_y = lidar_offset_distance_ * std::cos(current_yaw_);
+
+  float bx = x + offset_x;
+  float by = y + offset_y;
+
+  float ground_distance = std::sqrt(bx * bx + by * by);
   float object_distance = ground_distance;
-  float object_angle = std::atan2(y, x);
+  float object_angle = std::atan2(by, bx);
 
   RCLCPP_INFO(this->get_logger(),
-              "Object at: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m,"
+              "Object at: (x=%.3f,y=%.3f) ground_distance=%.2f m,"
               " angle=%.2f rad",
-              x, y, z, ground_distance, object_angle);
+              bx, by, ground_distance,
+              object_angle);
 
   if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
@@ -155,19 +193,22 @@ void LidarObjectNavigator::execute(
     return;
   }
 
-  float safety_distance = SAFETY_DISTANCE;
-  float target_distance = std::max(0.0f, object_distance - safety_distance);
+  float target_distance = std::max(0.0f, object_distance - safety_distance_);
   float target_x = target_distance * std::cos(object_angle);
   float target_y = target_distance * std::sin(object_angle);
 
-  RCLCPP_INFO(this->get_logger(), "Sending relative move goal: (%.2f, %.2f)",
-              target_x, target_y);
+  float final_yaw = std::atan2(by - target_y, bx - target_x);
+
+  RCLCPP_INFO(this->get_logger(),
+              "Sending relative move goal: (%.2f, %.2f) yaw=%.2f",
+              target_x, target_y, final_yaw);
 
   auto goal_msg = NavigateToPoseInFrameAction::Goal();
   goal_msg.x = target_x;
   goal_msg.y = target_y;
-  goal_msg.yaw = object_angle;
+  goal_msg.yaw = final_yaw;
   goal_msg.absolute = false;
+
 
   auto send_goal_options =
       rclcpp_action::Client<NavigateToPoseInFrameAction>::SendGoalOptions();
