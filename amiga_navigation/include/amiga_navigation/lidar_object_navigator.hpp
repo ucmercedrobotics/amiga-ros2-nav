@@ -59,9 +59,12 @@ class LidarObjectNavigator : public rclcpp::Node {
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
-  rclcpp_action::Client<NavigateToPoseInFrameAction>::SharedPtr
+    rclcpp_action::Client<NavigateToPoseInFrameAction>::SharedPtr
       navigate_to_pose_in_frame_client_;
-  rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
+    rclcpp_action::Server<NavigateViaLidar>::SharedPtr action_server_;
+
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     sensor_msgs::msg::PointCloud2::SharedPtr latest_scan_;
     std::string base_frame_;
@@ -69,7 +72,7 @@ class LidarObjectNavigator : public rclcpp::Node {
     float lidar_offset_distance_;
     float current_yaw_ = 0.0f;
 
-  std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
+    std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
 };
 
 }  // namespace amiga_navigation
