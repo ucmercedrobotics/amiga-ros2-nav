@@ -13,10 +13,10 @@ namespace amiga_navigation {
 
 LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     : Node("navigate_to_pose_in_frame", options) {
-  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_raw", 10);
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-      "/odometry/filtered/local", 10,
-      std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
+    "/odometry/filtered/local", 10,
+    std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
 
   // Parameters
   this->declare_parameter<double>("forward_speed", MAX_LINEAR_VELOCITY);
@@ -84,6 +84,8 @@ void LinearVelo::execute(
               goal->x, goal->y, goal->yaw);
 
   // Capture start pose
+  const double start_x = current_x_;
+  const double start_y = current_y_;
   const double start_yaw = current_yaw_;
 
   double target_yaw = goal->yaw;
@@ -92,6 +94,7 @@ void LinearVelo::execute(
   bool has_yaw_goal = std::fabs(goal->yaw) > 1e-3;
   bool position_done = false;
   bool yaw_done = false;
+  bool heading_done = false;
   double target_x = goal->x;
   double target_y = goal->y;
 
@@ -110,7 +113,6 @@ void LinearVelo::execute(
   const double angle_to_goal = std::atan2(goal_vec_y, goal_vec_x);
 
   double traveled_distance = 0.0;
-  rclcpp::Time last_time = this->get_clock()->now();
   const double forward_speed_cmd = forward_speed_cmd_;
 
   auto normalize_angle = [](double a) {
@@ -118,17 +120,6 @@ void LinearVelo::execute(
     while (a < -M_PI) a += 2.0 * M_PI;
     return a;
   };
-  double desired_signed_rotation = 0.0;
-  if (has_yaw_goal) {
-    if (goal->absolute) {
-      desired_signed_rotation = normalize_angle(target_yaw - start_yaw);
-    } else {
-      desired_signed_rotation = goal->yaw;
-    }
-  }
-  const double desired_rotation_mag = std::fabs(desired_signed_rotation);
-  const double rotation_dir = (desired_signed_rotation >= 0.0) ? 1.0 : -1.0;
-  double rotated_angle = 0.0;
 
   while (rclcpp::ok()) {
     if (goal_handle->is_canceling()) {
@@ -141,48 +132,58 @@ void LinearVelo::execute(
 
     geometry_msgs::msg::Twist cmd;
 
-    rclcpp::Time now = this->get_clock()->now();
-    double dt = (now - last_time).seconds();
-    if (dt > 0.0) {
-      traveled_distance += current_linear_speed_ * dt;
-      rotated_angle += std::fabs(current_angular_speed_) * dt;
-      last_time = now;
-    }
+    const double dx = current_x_ - start_x;
+    const double dy = current_y_ - start_y;
+    traveled_distance = std::sqrt(dx * dx + dy * dy);
 
     double distance_remaining =
         std::max(0.0, target_distance - traveled_distance);
     feedback->distance_remaining = distance_remaining;
-    double yaw_remaining =
-        rotation_dir * std::max(0.0, desired_rotation_mag - rotated_angle);
-    feedback->yaw_remaining = has_yaw_goal ? yaw_remaining : 0.0f;
+    const double yaw_error =
+      has_yaw_goal ? normalize_angle(target_yaw - current_yaw_) : 0.0;
+    feedback->yaw_remaining = has_yaw_goal ? yaw_error : 0.0f;
     goal_handle->publish_feedback(feedback);
 
-    // --- Rotation-only mode ---
-    if (has_yaw_goal && (fabs(goal->x) < 1e-3 && fabs(goal->y) < 1e-3)) {
-      if (rotated_angle < desired_rotation_mag) {
-        cmd.angular.z = angular_speed_cmd_ * rotation_dir;
+    // --- Rotate-in-place to face goal ---
+    if (!position_done && !heading_done) {
+      const double heading_error = atan2(sin(angle_to_goal - current_yaw_),
+                                         cos(angle_to_goal - current_yaw_));
+      if (std::fabs(heading_error) > HEADING_TOL) {
+        const double scaled = std::clamp(heading_error / YAW_SLOWDOWN, -1.0, 1.0);
+        cmd.angular.z = angular_speed_cmd_ * scaled;
       } else {
-        yaw_done = true;
+        heading_done = true;
       }
     }
     // --- Translation mode ---
-    else {
-      double heading_error = atan2(sin(angle_to_goal - current_yaw_),
-                                   cos(angle_to_goal - current_yaw_));
-
+    else if (!position_done) {
       if (traveled_distance < target_distance) {
-        double speed_scale =
-            std::clamp(MAX_LINEAR_VELOCITY - std::min(std::fabs(heading_error),
-                                                      MAX_LINEAR_VELOCITY),
-                       MIN_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+        // Scale velocity based on distance remaining - slow down as we approach
+        const double decel_distance = 2.0;  // Distance at which to start slowing down (meters)
+        double speed_scale;
+
+        if (distance_remaining > decel_distance) {
+          speed_scale = 1.0;  // Full speed while far away
+        } else {
+          // Linearly interpolate from MIN to MAX velocity as we approach
+          speed_scale = std::clamp(distance_remaining / decel_distance,
+                                   MIN_LINEAR_VELOCITY / MAX_LINEAR_VELOCITY,
+                                   1.0);
+        }
+
         cmd.linear.x = forward_speed_cmd * speed_scale;
-        cmd.angular.z = MAX_ANGULAR_VELOCITY * heading_error;
       } else {
         position_done = true;
         cmd.linear.x = 0.0;
-        if (has_yaw_goal && rotated_angle < desired_rotation_mag) {
-          cmd.angular.z = angular_speed_cmd_ * rotation_dir;
-        }
+      }
+    }
+    // --- Final yaw alignment ---
+    else if (has_yaw_goal) {
+      if (std::fabs(yaw_error) > YAW_TOL) {
+        const double scaled = std::clamp(yaw_error / YAW_SLOWDOWN, -1.0, 1.0);
+        cmd.angular.z = angular_speed_cmd_ * scaled;
+      } else {
+        yaw_done = true;
       }
     }
 
@@ -194,7 +195,7 @@ void LinearVelo::execute(
     cmd_pub_->publish(cmd);
 
     if ((position_done || (!goal->x && !goal->y)) &&
-        (!has_yaw_goal || yaw_done || rotated_angle >= desired_rotation_mag)) {
+      (!has_yaw_goal || yaw_done)) {
       stop_robot();
       result->success = true;
       result->message = "Goal reached successfully.";

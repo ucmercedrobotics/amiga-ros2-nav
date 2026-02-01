@@ -68,6 +68,7 @@ class LidarObjectNavigator : public rclcpp::Node {
 
     sensor_msgs::msg::PointCloud2::SharedPtr latest_scan_;
     std::string base_frame_;
+    std::string lidar_link_;
     float safety_distance_;
     float lidar_offset_distance_;
     float current_yaw_ = 0.0f;

@@ -8,6 +8,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
 from nav2_common.launch import RewrittenYaml
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -36,4 +37,24 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription([nav2_launch])
+    collision_monitor_node = Node(
+        package="nav2_collision_monitor",
+        executable="collision_monitor",
+        name="collision_monitor",
+        output="screen",
+        parameters=[configured_params],
+    )
+
+    collision_monitor_lifecycle = Node(
+        package="nav2_lifecycle_manager",
+        executable="lifecycle_manager",
+        name="collision_monitor_lifecycle_manager",
+        output="screen",
+        parameters=[
+            {"use_sim_time": False},
+            {"autostart": True},
+            {"node_names": ["collision_monitor"]},
+        ],
+    )
+
+    return LaunchDescription([nav2_launch, collision_monitor_node, collision_monitor_lifecycle])

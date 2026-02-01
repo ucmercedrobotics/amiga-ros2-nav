@@ -19,9 +19,11 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
     : Node("lidar_object_navigator", options) {
   this->declare_parameter<std::string>("lidar_topic", "/ouster/points");
   this->declare_parameter<std::string>("base_frame", "base_link");
+  this->declare_parameter<std::string>("lidar_link", "lidar_link");
   this->declare_parameter<double>("safety_distance", 1.25);
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
   base_frame_ = this->get_parameter("base_frame").as_string();
+  lidar_link_ = this->get_parameter("lidar_link").as_string();
   safety_distance_ = this->get_parameter("safety_distance").as_double();
 
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -113,7 +115,7 @@ void LidarObjectNavigator::execute(
   geometry_msgs::msg::TransformStamped transform_stamped;
   try {
     transform_stamped = tf_buffer_->lookupTransform(
-        base_frame_, "os_sensor", tf2::TimePointZero);
+        base_frame_, lidar_link_, tf2::TimePointZero);
   } catch (tf2::TransformException &ex) {
     RCLCPP_WARN(this->get_logger(), "Could not transform: %s", ex.what());
     result->success = false;
@@ -123,7 +125,8 @@ void LidarObjectNavigator::execute(
   }
 
   RCLCPP_DEBUG(this->get_logger(),
-              "Transform from os_sensor to base_link: translation=(%.2f, %.2f, %.2f), rotation=(%.2f, %.2f, %.2f, %.2f)",
+              "Transform from %s to %s: translation=(%.2f, %.2f, %.2f), rotation=(%.2f, %.2f, %.2f, %.2f)",
+              lidar_link_.c_str(), base_frame_.c_str(),
               transform_stamped.transform.translation.x,
               transform_stamped.transform.translation.y,
               transform_stamped.transform.translation.z,
