@@ -15,7 +15,7 @@ LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     : Node("navigate_to_pose_in_frame", options) {
   cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_raw", 10);
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-    "/odometry/filtered/local", 10,
+    "/odometry/filtered/local", 1,
     std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
 
   // Parameters
@@ -44,11 +44,6 @@ void LinearVelo::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   double roll, pitch, yaw;
   m.getRPY(roll, pitch, yaw);
   current_yaw_ = yaw;
-
-  const double vx = msg->twist.twist.linear.x;
-  const double vy = msg->twist.twist.linear.y;
-  current_linear_speed_ = std::sqrt(vx * vx + vy * vy);
-  current_angular_speed_ = msg->twist.twist.angular.z;
 }
 
 rclcpp_action::GoalResponse LinearVelo::handle_goal(
@@ -78,7 +73,7 @@ void LinearVelo::execute(
   auto feedback = std::make_shared<NavigateToPoseInFrameAction::Feedback>();
   auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
 
-  rclcpp::Rate rate(10);
+  rclcpp::Rate rate(2);
   RCLCPP_INFO(get_logger(),
               "Executing linear velocity goal: x=%.2f, y=%.2f, yaw=%.2f",
               goal->x, goal->y, goal->yaw);

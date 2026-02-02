@@ -9,9 +9,9 @@
 
 static constexpr double MIN_LINEAR_VELOCITY = 0.1f;
 static constexpr double MAX_LINEAR_VELOCITY = 0.5f;
-static constexpr double MAX_ANGULAR_VELOCITY = 0.5f;
-static constexpr double HEADING_TOL = 0.5f;
-static constexpr double YAW_TOL = 0.1f;
+static constexpr double MAX_ANGULAR_VELOCITY = 0.4f;
+static constexpr double HEADING_TOL = 0.15f;
+static constexpr double YAW_TOL = 0.15f;
 static constexpr double YAW_SLOWDOWN = 0.5f;
 
 namespace amiga_navigation {

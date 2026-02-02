@@ -29,7 +29,7 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-  auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(1));
   lidar_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     lidar_topic, qos,
     std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
