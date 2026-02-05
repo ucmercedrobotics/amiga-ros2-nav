@@ -152,7 +152,7 @@ void LinearVelo::execute(
     }
     // --- Translation mode ---
     else if (!position_done) {
-      if (traveled_distance < target_distance) {
+      if (traveled_distance < target_distance && target_distance > 0.0) {
         // Scale velocity based on distance remaining - slow down as we approach
         const double decel_distance = 2.0;  // Distance at which to start slowing down (meters)
         double speed_scale;
