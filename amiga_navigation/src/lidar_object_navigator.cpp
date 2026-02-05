@@ -8,6 +8,8 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/LinearMath/Quaternion.h"
 
 using namespace std::placeholders;
 
@@ -16,12 +18,25 @@ namespace amiga_navigation {
 LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
     : Node("lidar_object_navigator", options) {
   this->declare_parameter<std::string>("lidar_topic", "/ouster/points");
+  this->declare_parameter<std::string>("base_frame", "base_link");
+  this->declare_parameter<std::string>("lidar_link", "lidar_link");
+  this->declare_parameter<double>("safety_distance", 1.25);
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
+  base_frame_ = this->get_parameter("base_frame").as_string();
+  lidar_link_ = this->get_parameter("lidar_link").as_string();
+  safety_distance_ = this->get_parameter("safety_distance").as_double();
 
-  auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(1));
   lidar_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     lidar_topic, qos,
     std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
+
+  odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+    "/odometry/filtered/local", qos,
+    std::bind(&LidarObjectNavigator::odom_callback, this, _1));
 
   navigate_to_pose_in_frame_client_ =
       rclcpp_action::create_client<NavigateToPoseInFrameAction>(
@@ -42,6 +57,21 @@ void LidarObjectNavigator::lidar_callback(
   RCLCPP_DEBUG(this->get_logger(), "Received PointCloud2 with %zu points",
                point_count);
   latest_scan_ = msg;
+}
+
+void LidarObjectNavigator::odom_callback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
+  // Extract yaw from quaternion
+  tf2::Quaternion q(
+    msg->pose.pose.orientation.x,
+    msg->pose.pose.orientation.y,
+    msg->pose.pose.orientation.z,
+    msg->pose.pose.orientation.w
+  );
+  tf2::Matrix3x3 m(q);
+  double roll, pitch, yaw;
+  m.getRPY(roll, pitch, yaw);
+  current_yaw_ = static_cast<float>(yaw);
 }
 
 rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
@@ -80,6 +110,31 @@ void LidarObjectNavigator::execute(
   double azimuth_tolerance = AZIMUTH_TOLERANCE; 
 
   const auto &pc = *latest_scan_;
+
+  // Get transform from LiDAR frame to base_link
+  geometry_msgs::msg::TransformStamped transform_stamped;
+  try {
+    transform_stamped = tf_buffer_->lookupTransform(
+        base_frame_, lidar_link_, tf2::TimePointZero);
+  } catch (tf2::TransformException &ex) {
+    RCLCPP_WARN(this->get_logger(), "Could not transform: %s", ex.what());
+    result->success = false;
+    result->message = "TF transform failed";
+    goal_handle->abort(result);
+    return;
+  }
+
+  RCLCPP_DEBUG(this->get_logger(),
+              "Transform from %s to %s: translation=(%.2f, %.2f, %.2f), rotation=(%.2f, %.2f, %.2f, %.2f)",
+              lidar_link_.c_str(), base_frame_.c_str(),
+              transform_stamped.transform.translation.x,
+              transform_stamped.transform.translation.y,
+              transform_stamped.transform.translation.z,
+              transform_stamped.transform.rotation.x,
+              transform_stamped.transform.rotation.y,
+              transform_stamped.transform.rotation.z,
+              transform_stamped.transform.rotation.w);
+
   sensor_msgs::PointCloud2ConstIterator<float> iter_x(pc, "x");
   sensor_msgs::PointCloud2ConstIterator<float> iter_y(pc, "y");
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(pc, "z");
@@ -94,19 +149,35 @@ void LidarObjectNavigator::execute(
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
       continue;
 
-    double azimuth = std::atan2(y, x);
+    // Transform point to base_link frame
+    geometry_msgs::msg::PointStamped lidar_point, base_point;
+    lidar_point.header = pc.header;
+    lidar_point.point.x = x;
+    lidar_point.point.y = y;
+    lidar_point.point.z = z;
+    
+    tf2::doTransform(lidar_point, base_point, transform_stamped);
+    
+    float bx = base_point.point.x;
+    float by = base_point.point.y;
+    float bz = base_point.point.z;
+
+    double azimuth = std::atan2(by, bx);
     double diff = std::atan2(std::sin(azimuth - theta_target),
                             std::cos(azimuth - theta_target));
 
     if (std::fabs(diff) < azimuth_tolerance) {
-      if (z > MIN_OBJECT_HEIGHT && z < MAX_OBJECT_HEIGHT) {
-        selected_points.emplace_back(x, y, z);
+      if (bz > MIN_OBJECT_HEIGHT && bz < MAX_OBJECT_HEIGHT) {
+        selected_points.emplace_back(bx, by, bz);
       }
     }
   }
 
   if (selected_points.empty()) {
     RCLCPP_WARN(this->get_logger(), "No points found at orientation %.2f rad", theta_target);
+    result->success = false;
+    result->message = "No points found";
+    goal_handle->abort(result);
     return;
   }
 
@@ -124,26 +195,25 @@ void LidarObjectNavigator::execute(
       closest_idx = i;
     }
   }
-  
+
   if (min_distance >= std::numeric_limits<float>::max()) {
     RCLCPP_WARN(this->get_logger(), 
                 "No points found within maximum distance of %.2f m", MAX_OBJECT_DISTANCE);
+    result->success = false;
+    result->message = "No points within range";
+    goal_handle->abort(result);
     return;
   }
-  
-  x = selected_points[closest_idx](0);
-  y = selected_points[closest_idx](1);
-  z = selected_points[closest_idx](2);
 
-  // TODO: we need to convert this into base frame coordinates, not sensor
-  float ground_distance = std::sqrt(x * x + y * y);
-  float object_distance = ground_distance;
-  float object_angle = std::atan2(y, x);
+  float bx = selected_points[closest_idx](0);
+  float by = selected_points[closest_idx](1);
+
+  float ground_distance = std::sqrt(bx * bx + by * by);
+  float object_angle = std::atan2(by, bx);
 
   RCLCPP_INFO(this->get_logger(),
-              "Object at: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m,"
-              " angle=%.2f rad",
-              x, y, z, ground_distance, object_angle);
+              "Object at: (x=%.3f,y=%.3f) ground_distance=%.2f m, angle=%.2f rad",
+              bx, by, ground_distance, object_angle);
 
   if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
@@ -155,19 +225,21 @@ void LidarObjectNavigator::execute(
     return;
   }
 
-  float safety_distance = SAFETY_DISTANCE;
-  float target_distance = std::max(0.0f, object_distance - safety_distance);
+  // TODO: this isn't ideal
+  float target_distance = std::max(0.0f, ground_distance - safety_distance_);
   float target_x = target_distance * std::cos(object_angle);
   float target_y = target_distance * std::sin(object_angle);
 
-  RCLCPP_INFO(this->get_logger(), "Sending relative move goal: (%.2f, %.2f)",
-              target_x, target_y);
+  RCLCPP_INFO(this->get_logger(),
+              "Sending relative move goal: (%.2f, %.2f) yaw=%.2f",
+              target_x, target_y, object_angle);
 
   auto goal_msg = NavigateToPoseInFrameAction::Goal();
   goal_msg.x = target_x;
   goal_msg.y = target_y;
   goal_msg.yaw = object_angle;
   goal_msg.absolute = false;
+
 
   auto send_goal_options =
       rclcpp_action::Client<NavigateToPoseInFrameAction>::SendGoalOptions();
