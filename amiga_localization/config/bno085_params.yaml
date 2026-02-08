@@ -5,7 +5,7 @@ bno085:
     data_query_frequency: 100
     calib_status_frequency: 1
     frame_id: "bno085"
-    initial_calibration: False
+    initial_calibration: True
     calibration_timeout: 60
     ## Sensor standard deviation [x,y,z]
     ## Used to calculate covariance matrices

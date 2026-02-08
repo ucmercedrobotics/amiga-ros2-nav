@@ -5,7 +5,7 @@ from collections import deque
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, MagneticField
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -16,17 +16,22 @@ class ImuOrientationPlotter(Node):
         super().__init__("imu_orientation_plotter")
 
         self.declare_parameter("imu_topic", "bno085/imu")
+        self.declare_parameter("mag_topic", "bno085/mag")
         self.declare_parameter("history_secs", 60.0)
         self.declare_parameter("max_points", 6000)
         self.declare_parameter("use_header_stamp", True)
 
         self.imu_topic = self.get_parameter("imu_topic").value
+        self.mag_topic = self.get_parameter("mag_topic").value
         self.history_secs = float(self.get_parameter("history_secs").value)
         self.max_points = int(self.get_parameter("max_points").value)
         self.use_header_stamp = bool(self.get_parameter("use_header_stamp").value)
 
         qos = QoSProfile(depth=50)
         self.sub = self.create_subscription(Imu, self.imu_topic, self._imu_cb, qos)
+        self.mag_sub = self.create_subscription(
+            MagneticField, self.mag_topic, self._mag_cb, qos
+        )
 
         self._t0 = None
         self._lock = threading.Lock()
@@ -35,6 +40,9 @@ class ImuOrientationPlotter(Node):
         self._pitch = deque()
         self._yaw = deque()
         self._qnorm = deque()
+        self._mag_t = deque()
+        self._mag_x = deque()
+        self._mag_y = deque()
 
     def _imu_cb(self, msg: Imu):
         if self.use_header_stamp and msg.header.stamp.sec != 0:
@@ -87,6 +95,18 @@ class ImuOrientationPlotter(Node):
                 self._yaw.popleft()
                 self._qnorm.popleft()
 
+        while len(self._mag_t) > self.max_points:
+            self._mag_t.popleft()
+            self._mag_x.popleft()
+            self._mag_y.popleft()
+
+        if self.history_secs > 0 and len(self._mag_t) > 1:
+            newest = self._mag_t[-1]
+            while len(self._mag_t) > 1 and (newest - self._mag_t[0]) > self.history_secs:
+                self._mag_t.popleft()
+                self._mag_x.popleft()
+                self._mag_y.popleft()
+
     def snapshot(self):
         with self._lock:
             return (
@@ -95,7 +115,30 @@ class ImuOrientationPlotter(Node):
                 list(self._pitch),
                 list(self._yaw),
                 list(self._qnorm),
+                list(self._mag_t),
+                list(self._mag_x),
+                list(self._mag_y),
             )
+
+    def _mag_cb(self, msg: MagneticField):
+        if self.use_header_stamp and msg.header.stamp.sec != 0:
+            t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        else:
+            now = self.get_clock().now().to_msg()
+            t = now.sec + now.nanosec * 1e-9
+
+        if self._t0 is None:
+            self._t0 = t
+        t = t - self._t0
+
+        mx = float(msg.magnetic_field.x)
+        my = float(msg.magnetic_field.y)
+
+        with self._lock:
+            self._mag_t.append(t)
+            self._mag_x.append(mx)
+            self._mag_y.append(my)
+            self._trim_history()
 
 
 def quaternion_to_euler(x: float, y: float, z: float, w: float):
@@ -120,37 +163,48 @@ def main():
     rclpy.init()
     node = ImuOrientationPlotter()
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
-    fig.suptitle("IMU Orientation Over Time")
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    fig.suptitle("Magnetometer Distortion (XY Circle View)")
 
-    (line_roll,) = ax1.plot([], [], label="roll (deg)")
-    (line_pitch,) = ax1.plot([], [], label="pitch (deg)")
-    (line_yaw,) = ax1.plot([], [], label="yaw (deg)")
-    ax1.set_ylabel("deg")
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc="upper right")
-
-    (line_qnorm,) = ax2.plot([], [], label="|q|")
-    ax2.set_xlabel("time (s)")
-    ax2.set_ylabel("quat norm")
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc="upper right")
+    (line_mag,) = ax.plot([], [], label="mag xy")
+    (point_mag,) = ax.plot([], [], "o", label="latest")
+    (ref_circle,) = ax.plot([], [], "--", alpha=0.5, label="ref circle")
+    ax.set_xlabel("mag x")
+    ax.set_ylabel("mag y")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right")
 
     def update(_):
-        t, roll, pitch, yaw, qnorm = node.snapshot()
-        if not t:
-            return line_roll, line_pitch, line_yaw, line_qnorm
+        (
+            t,
+            roll,
+            pitch,
+            yaw,
+            qnorm,
+            mag_t,
+            mag_x,
+            mag_y,
+        ) = node.snapshot()
+        if not mag_x:
+            return line_mag, point_mag, ref_circle
 
-        line_roll.set_data(t, roll)
-        line_pitch.set_data(t, pitch)
-        line_yaw.set_data(t, yaw)
-        line_qnorm.set_data(t, qnorm)
+        line_mag.set_data(mag_x, mag_y)
+        point_mag.set_data([mag_x[-1]], [mag_y[-1]])
 
-        ax1.relim()
-        ax1.autoscale_view()
-        ax2.relim()
-        ax2.autoscale_view()
-        return line_roll, line_pitch, line_yaw, line_qnorm
+        radii = [math.hypot(x, y) for x, y in zip(mag_x, mag_y)]
+        if radii:
+            r = sorted(radii)[len(radii) // 2]
+        else:
+            r = 1.0
+        theta = [i * 2.0 * math.pi / 200.0 for i in range(201)]
+        ref_circle.set_data([r * math.cos(a) for a in theta], [r * math.sin(a) for a in theta])
+
+        max_abs = max(max(abs(v) for v in mag_x), max(abs(v) for v in mag_y), r, 1e-6)
+        lim = max_abs * 1.1
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+        return line_mag, point_mag, ref_circle
 
     spinner = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spinner.start()

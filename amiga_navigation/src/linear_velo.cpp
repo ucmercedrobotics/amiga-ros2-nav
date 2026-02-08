@@ -142,7 +142,7 @@ void LinearVelo::execute(
     // --- Rotate-in-place to face goal ---
     if (!position_done && !heading_done) {
       const double heading_error = atan2(sin(angle_to_goal - current_yaw_),
-                                         cos(angle_to_goal - current_yaw_));
+                                         cos(angle_to_goal - current_yaw_)) + yaw_error;
       if (std::fabs(heading_error) > HEADING_TOL) {
         const double scaled = std::clamp(heading_error / YAW_SLOWDOWN, -1.0, 1.0);
         cmd.angular.z = angular_speed_cmd_ * scaled;
