@@ -18,6 +18,8 @@ from tf_transformations import euler_from_quaternion
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
 from amiga_interfaces.srv import GetTreeInfo
 
+DISTANCE_TOLERANCE: float = 0.5  # meters
+
 
 class WaypointFollowerActionServer(Node):
 
@@ -295,10 +297,10 @@ class WaypointFollowerActionServer(Node):
                 [self.utm_position[0], self.utm_position[1]],
                 [tree_utm[0], tree_utm[1]],
             )
-            if dist_to_tree < dist_to_row:
+            if dist_to_tree < dist_to_row or dist_to_row < DISTANCE_TOLERANCE or dist_to_tree < DISTANCE_TOLERANCE:
                 do_row_nav = False
                 self.get_logger().info(
-                    "Skipping row waypoint: already closer to tree than row waypoint"
+                    "Skipping row waypoint: already closer to tree than row waypoint or within distance tolerance"
                 )
 
         if do_row_nav:
