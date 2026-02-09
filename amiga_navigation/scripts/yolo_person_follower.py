@@ -24,7 +24,7 @@ class YOLOPersonFollower(Node):
     def __init__(self):
         super().__init__("yolo_person_follower")
 
-        self.declare_parameter("yolo_model", "yolo11n-pose.pt")
+        self.declare_parameter("yolo_model", "yolo11n-pose.engine")
         self.declare_parameter("camera_topic", "/oak0/rgb/image_raw")
         self.declare_parameter("depth_topic", "/oak0/stereo/image_raw")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
@@ -51,6 +51,7 @@ class YOLOPersonFollower(Node):
         self.hand_raise_threshold = self.get_parameter("hand_raise_threshold").value
 
         self.get_logger().info(f"Loading YOLO model: {self.yolo_model}")
+        # https://docs.ultralytics.com/integrations/tensorrt/#deployment-options-in-tensorrt
         self.model = YOLO(self.yolo_model)
         self.get_logger().info("YOLO model loaded successfully")
 
