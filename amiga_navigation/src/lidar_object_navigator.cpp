@@ -38,9 +38,9 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
     "/odometry/filtered/local", qos,
     std::bind(&LidarObjectNavigator::odom_callback, this, _1));
 
-  navigate_to_pose_in_frame_client_ =
-      rclcpp_action::create_client<NavigateToPoseInFrameAction>(
-          this, "navigate_to_pose_in_frame");
+  move_in_frame_client_ =
+      rclcpp_action::create_client<MoveInFrameAction>(
+          this, "move_in_frame");
 
   action_server_ = rclcpp_action::create_server<NavigateViaLidar>(
       this, "navigate_via_lidar",
@@ -215,12 +215,12 @@ void LidarObjectNavigator::execute(
               "Object at: (x=%.3f,y=%.3f) ground_distance=%.2f m, angle=%.2f rad",
               bx, by, ground_distance, object_angle);
 
-  if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
+  if (!move_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
     RCLCPP_ERROR(this->get_logger(),
-                 "NavigateToPoseInFrame action server not available!");
+                 "MoveInFrame action server not available!");
     result->success = false;
-    result->message = "NavigateToPoseInFrame action server not available";
+    result->message = "MoveInFrame action server not available";
     goal_handle->abort(result);
     return;
   }
@@ -234,15 +234,12 @@ void LidarObjectNavigator::execute(
               "Sending relative move goal: (%.2f, %.2f) yaw=%.2f",
               target_x, target_y, object_angle);
 
-  auto goal_msg = NavigateToPoseInFrameAction::Goal();
+  auto goal_msg = MoveInFrameAction::Goal();
   goal_msg.x = target_x;
   goal_msg.y = target_y;
-  goal_msg.yaw = object_angle;
-  goal_msg.absolute = false;
-
 
   auto send_goal_options =
-      rclcpp_action::Client<NavigateToPoseInFrameAction>::SendGoalOptions();
+      rclcpp_action::Client<MoveInFrameAction>::SendGoalOptions();
   send_goal_options.goal_response_callback =
       std::bind(&LidarObjectNavigator::goal_response_callback, this, _1);
   send_goal_options.feedback_callback =
@@ -250,31 +247,30 @@ void LidarObjectNavigator::execute(
   send_goal_options.result_callback =
       std::bind(&LidarObjectNavigator::result_callback, this, _1);
 
-  navigate_to_pose_in_frame_client_->async_send_goal(goal_msg,
-                                                     send_goal_options);
+  move_in_frame_client_->async_send_goal(goal_msg, send_goal_options);
 }
 
 void LidarObjectNavigator::goal_response_callback(
-    const GoalHandleNavigateToPoseInFrame::SharedPtr& goal_handle) {
+    const GoalHandleMoveInFrame::SharedPtr& goal_handle) {
   if (!goal_handle) {
     RCLCPP_ERROR(this->get_logger(),
-                 "Goal was rejected by NavigateToPoseInFrameAction server");
+                 "Goal was rejected by MoveInFrameAction server");
     if (active_goal_handle_) {
       auto result = std::make_shared<NavigateViaLidar::Result>();
       result->success = false;
-      result->message = "NavigateToPoseInFrameAction goal rejected";
+      result->message = "MoveInFrameAction goal rejected";
       active_goal_handle_->abort(result);
     }
   } else {
     RCLCPP_INFO(
         this->get_logger(),
-        "Goal accepted by NavigateToPoseInFrameAction server, navigating...");
+        "Goal accepted by MoveInFrameAction server, navigating...");
   }
 }
 
 void LidarObjectNavigator::feedback_callback(
-    GoalHandleNavigateToPoseInFrame::SharedPtr,
-    const std::shared_ptr<const NavigateToPoseInFrameAction::Feedback>
+    GoalHandleMoveInFrame::SharedPtr,
+    const std::shared_ptr<const MoveInFrameAction::Feedback>
         feedback) {
   RCLCPP_INFO(this->get_logger(), "Distance remaining: %.2f m",
               feedback->distance_remaining);
@@ -286,7 +282,7 @@ void LidarObjectNavigator::feedback_callback(
 }
 
 void LidarObjectNavigator::result_callback(
-    const GoalHandleNavigateToPoseInFrame::WrappedResult& result) {
+    const GoalHandleMoveInFrame::WrappedResult& result) {
   auto action_result = std::make_shared<NavigateViaLidar::Result>();
   if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
     RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");

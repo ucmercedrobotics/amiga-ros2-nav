@@ -2,10 +2,6 @@
 float32 x
 float32 y
 bool manhattan
-# if yaw is non-zero, then we check absolute.
-float32 yaw
-# this is for orientation type
-bool absolute
 ---
 # Result
 bool success
@@ -13,4 +9,3 @@ string message
 ---
 # Feedback
 float32 distance_remaining
-float32 yaw_remaining

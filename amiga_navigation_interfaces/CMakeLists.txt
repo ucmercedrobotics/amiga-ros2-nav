@@ -12,8 +12,9 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/GPSWaypoint.action"
+  "action/MoveInFrame.action"
   "action/NavigateViaLidar.action"
-  "action/NavigateToPoseInFrame.action"
+  "action/RotateInFrame.action"
   "action/FollowPerson.action"
   "action/TreeIDWaypoint.action"
   DEPENDENCIES geometry_msgs
