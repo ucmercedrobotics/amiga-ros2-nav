@@ -175,9 +175,9 @@ void LidarObjectNavigator::execute(
 
   if (selected_points.empty()) {
     RCLCPP_WARN(this->get_logger(), "No points found at orientation %.2f rad", theta_target);
-    result->success = false;
+    result->success = true;
     result->message = "No points found";
-    goal_handle->abort(result);
+    goal_handle->succeed(result);
     return;
   }
 

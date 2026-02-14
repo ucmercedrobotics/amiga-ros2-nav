@@ -8,13 +8,6 @@
 #include "amiga_navigation_interfaces/action/move_in_frame.hpp"
 #include "amiga_navigation_interfaces/action/rotate_in_frame.hpp"
 
-static constexpr double MIN_LINEAR_VELOCITY = 0.1f;
-static constexpr double MAX_LINEAR_VELOCITY = 0.5f;
-static constexpr double MAX_ANGULAR_VELOCITY = 0.4f;
-static constexpr double HEADING_TOL = 0.15f;
-static constexpr double YAW_TOL = 0.15f;
-static constexpr double YAW_SLOWDOWN = 0.5f;
-
 namespace amiga_navigation {
 
 class LinearVelo : public rclcpp::Node {
@@ -62,8 +55,14 @@ class LinearVelo : public rclcpp::Node {
   double current_x_ = 0.0, current_y_ = 0.0, current_yaw_ = 0.0;
   double current_linear_speed_ = 0.0;
   double current_angular_speed_ = 0.0;
-  double forward_speed_cmd_ = MAX_LINEAR_VELOCITY;
-  double angular_speed_cmd_ = MAX_ANGULAR_VELOCITY;
+  double min_linear_velocity_ = 0.1;
+  double max_linear_velocity_ = 0.5;
+  double max_angular_velocity_ = 0.5;
+  double heading_tol_ = 0.2;
+  double yaw_tol_ = 0.2;
+  double yaw_slowdown_ = 1.0;
+  double forward_speed_cmd_ = 0.0;
+  double angular_speed_cmd_ = 0.0;
 };
 
 }  // namespace amiga_navigation

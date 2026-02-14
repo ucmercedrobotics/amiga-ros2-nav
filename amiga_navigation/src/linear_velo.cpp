@@ -20,8 +20,21 @@ LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
 
   // Parameters
-  this->declare_parameter<double>("forward_speed", MAX_LINEAR_VELOCITY);
-  this->declare_parameter<double>("angular_speed", MAX_ANGULAR_VELOCITY);
+  this->declare_parameter<double>("min_linear_velocity", min_linear_velocity_);
+  this->declare_parameter<double>("max_linear_velocity", max_linear_velocity_);
+  this->declare_parameter<double>("max_angular_velocity", max_angular_velocity_);
+  this->declare_parameter<double>("heading_tol", heading_tol_);
+  this->declare_parameter<double>("yaw_tol", yaw_tol_);
+  this->declare_parameter<double>("yaw_slowdown", yaw_slowdown_);
+  this->declare_parameter<double>("forward_speed", max_linear_velocity_);
+  this->declare_parameter<double>("angular_speed", max_angular_velocity_);
+
+  this->get_parameter("min_linear_velocity", min_linear_velocity_);
+  this->get_parameter("max_linear_velocity", max_linear_velocity_);
+  this->get_parameter("max_angular_velocity", max_angular_velocity_);
+  this->get_parameter("heading_tol", heading_tol_);
+  this->get_parameter("yaw_tol", yaw_tol_);
+  this->get_parameter("yaw_slowdown", yaw_slowdown_);
   this->get_parameter("forward_speed", forward_speed_cmd_);
   this->get_parameter("angular_speed", angular_speed_cmd_);
 
@@ -127,9 +140,9 @@ void LinearVelo::execute_move(
       const double heading_error =
           atan2(sin(angle_to_goal - current_yaw_),
                 cos(angle_to_goal - current_yaw_));
-      if (std::fabs(heading_error) > HEADING_TOL) {
+      if (std::fabs(heading_error) > heading_tol_) {
         const double scaled =
-            std::clamp(heading_error / YAW_SLOWDOWN, -1.0, 1.0);
+            std::clamp(heading_error / yaw_slowdown_, -max_angular_velocity_, max_angular_velocity_);
         cmd.angular.z = angular_speed_cmd_ * scaled;
       } else {
         heading_done = true;
@@ -145,7 +158,7 @@ void LinearVelo::execute_move(
           speed_scale = 1.0;
         } else {
           speed_scale = std::clamp(distance_remaining / decel_distance,
-                                   MIN_LINEAR_VELOCITY / MAX_LINEAR_VELOCITY,
+                                   min_linear_velocity_ / max_linear_velocity_,
                                    1.0);
         }
 
@@ -157,9 +170,9 @@ void LinearVelo::execute_move(
     }
 
     cmd.linear.x =
-        std::clamp(cmd.linear.x, -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+      std::clamp(cmd.linear.x, -max_linear_velocity_, max_linear_velocity_);
     cmd.angular.z =
-        std::clamp(cmd.angular.z, -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
+      std::clamp(cmd.angular.z, -max_angular_velocity_, max_angular_velocity_);
 
     cmd_pub_->publish(cmd);
 
@@ -228,8 +241,8 @@ void LinearVelo::execute_rotate(
     feedback->yaw_remaining = yaw_error;
     goal_handle->publish_feedback(feedback);
 
-    if (std::fabs(yaw_error) > YAW_TOL) {
-      const double scaled = std::clamp(yaw_error / YAW_SLOWDOWN, -1.0, 1.0);
+    if (std::fabs(yaw_error) > yaw_tol_) {
+      const double scaled = std::clamp(yaw_error / yaw_slowdown_, -1.0, 1.0);
       cmd.angular.z = angular_speed_cmd_ * scaled;
     } else {
       stop_robot();
@@ -240,7 +253,7 @@ void LinearVelo::execute_rotate(
     }
 
     cmd.angular.z =
-        std::clamp(cmd.angular.z, -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
+      std::clamp(cmd.angular.z, -max_angular_velocity_, max_angular_velocity_);
     cmd_pub_->publish(cmd);
 
     rate.sleep();

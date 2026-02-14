@@ -12,7 +12,7 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
-#define AZIMUTH_TOLERANCE 0.5f  // ~28.6 degrees
+#define AZIMUTH_TOLERANCE 0.5f
 #define MIN_OBJECT_HEIGHT 1.0f
 #define MAX_OBJECT_HEIGHT 1.5f
 #define MAX_OBJECT_DISTANCE 7.0f
