@@ -31,6 +31,7 @@ setup(
         "console_scripts": [
             "wheel_odometry_node = amiga_localization.wheel_odom:main",
             "bno085_node = amiga_localization.bno085_node:main",
+            "imu_orientation_plot = amiga_localization.imu_orientation_plot:main",
         ],
     },
 )

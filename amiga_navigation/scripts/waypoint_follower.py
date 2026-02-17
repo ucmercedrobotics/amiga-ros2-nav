@@ -18,6 +18,8 @@ from tf_transformations import euler_from_quaternion
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
 from amiga_interfaces.srv import GetTreeInfo
 
+DISTANCE_TOLERANCE: float = 1.5  # meters
+
 
 class WaypointFollowerActionServer(Node):
 
@@ -34,6 +36,9 @@ class WaypointFollowerActionServer(Node):
         self.gps_position = []
         self.utm_position = []
         self.robot_yaw_world = 0.0
+        # for north facing IMU VectorNav
+        self.declare_parameter("yaw_offset", math.pi/2)
+        self.yaw_offset = self.get_parameter("yaw_offset").value
 
         self.navigator = BasicNavigator()
 
@@ -102,7 +107,7 @@ class WaypointFollowerActionServer(Node):
         quaternion = msg.pose.pose.orientation
         quaternion_list = [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
         _, _, yaw = euler_from_quaternion(quaternion_list)
-        self.robot_yaw_world = yaw
+        self.robot_yaw_world = yaw - self.yaw_offset
 
     def goto_callback(self, goal_handle):
         """
@@ -194,6 +199,7 @@ class WaypointFollowerActionServer(Node):
             self.get_logger().info("waiting for current location...")
             rclpy.spin_once(self)
 
+        # first we gather information about the tree in question
         if not self._tree_info_client.wait_for_service(timeout_sec=5.0):
             self.get_logger().error("Orchard GetTreeInfo service unavailable")
             goal_handle.abort()
@@ -288,32 +294,49 @@ class WaypointFollowerActionServer(Node):
             f"Navigating to row waypoint near tree {tree_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
         )
 
-        goal_pose = PoseStamped()
-        goal_pose.header.frame_id = "utm"
-        goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
-        goal_pose.pose.position.x = candidate_utm[0]
-        goal_pose.pose.position.y = candidate_utm[1]
-
-        yaw = np.arctan2(
-            candidate_utm[1] - self.utm_position[1], candidate_utm[0] - self.utm_position[0]
-        )
-        goal_pose.pose.orientation.w = np.cos(yaw / 2)
-        goal_pose.pose.orientation.z = np.sin(yaw / 2)
-
-        self.get_logger().info(
-            f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
-        )
-
-        self.navigator.followWaypoints([goal_pose])
-
-        while not self.navigator.isTaskComplete():
-            feedback_msg.dist = math.dist(
+        do_row_nav = True
+        if approach_tree and tree_utm is not None:
+            dist_to_tree = math.dist(
                 [self.utm_position[0], self.utm_position[1]],
-                [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                [tree_utm[0], tree_utm[1]],
             )
-            self.get_logger().info("distance to goal %f" % feedback_msg.dist)
-            goal_handle.publish_feedback(feedback_msg)
-            rclpy.spin_once(self, timeout_sec=0.5)
+            if dist_to_tree < DISTANCE_TOLERANCE:
+                do_row_nav = False
+                self.get_logger().info(
+                    "Skipping row waypoint: already closer to tree than row waypoint or within distance tolerance"
+                )
+
+        if do_row_nav:
+            self.get_logger().info(
+                f"Navigating to row waypoint near tree {tree_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
+            )
+
+            goal_pose = PoseStamped()
+            goal_pose.header.frame_id = "utm"
+            goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+            goal_pose.pose.position.x = candidate_utm[0]
+            goal_pose.pose.position.y = candidate_utm[1]
+
+            yaw = np.arctan2(
+                candidate_utm[1] - self.utm_position[1], candidate_utm[0] - self.utm_position[0]
+            )
+            goal_pose.pose.orientation.w = np.cos(yaw / 2)
+            goal_pose.pose.orientation.z = np.sin(yaw / 2)
+
+            self.get_logger().info(
+                f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
+            )
+
+            self.navigator.followWaypoints([goal_pose])
+
+            while not self.navigator.isTaskComplete():
+                feedback_msg.dist = math.dist(
+                    [self.utm_position[0], self.utm_position[1]],
+                    [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                )
+                self.get_logger().info("distance to goal %f" % feedback_msg.dist)
+                goal_handle.publish_feedback(feedback_msg)
+                rclpy.spin_once(self, timeout_sec=0.5)
 
         object_angle = 0.0
         if tree_utm is not None:
@@ -328,6 +351,8 @@ class WaypointFollowerActionServer(Node):
         self.get_logger().info(f"Approaching tree via LIDAR navigation at absolute angle {object_angle} facing {theta_robot}")
 
         object_angle = object_angle - theta_robot
+
+        time.sleep(5.0)
         
         if approach_tree: 
             self.get_logger().info(f"Approaching tree via LIDAR navigation at relative angle {object_angle}")

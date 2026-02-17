@@ -27,8 +27,8 @@ NavigateToPoseInFrame::NavigateToPoseInFrame(const rclcpp::NodeOptions& options)
       global_frame, qos,
       std::bind(&NavigateToPoseInFrame::global_frame_callback, this, _1));
 
-  action_server_ = rclcpp_action::create_server<NavigateToPoseInFrameAction>(
-      this, "navigate_to_pose_in_frame",
+  action_server_ = rclcpp_action::create_server<MoveInFrameAction>(
+      this, "move_in_frame",
       std::bind(&NavigateToPoseInFrame::handle_goal, this, _1, _2),
       std::bind(&NavigateToPoseInFrame::handle_cancel, this, _1),
       std::bind(&NavigateToPoseInFrame::handle_accepted, this, _1));
@@ -43,11 +43,11 @@ void NavigateToPoseInFrame::global_frame_callback(
 
 rclcpp_action::GoalResponse NavigateToPoseInFrame::handle_goal(
     const rclcpp_action::GoalUUID& uuid,
-    std::shared_ptr<const NavigateToPoseInFrameAction::Goal> goal) {
+    std::shared_ptr<const MoveInFrameAction::Goal> goal) {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(),
-              "Received goal to move relative: x=%.2f, y=%.2f, yaw=%.2f rad",
-              goal->x, goal->y, goal->yaw);
+              "Received goal to move relative: x=%.2f, y=%.2f",
+              goal->x, goal->y);
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
@@ -75,7 +75,7 @@ void NavigateToPoseInFrame::execute(
   RCLCPP_INFO(this->get_logger(), "Executing relative move goal");
 
   const auto goal = goal_handle->get_goal();
-  auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
+  auto result = std::make_shared<MoveInFrameAction::Result>();
 
   if (!nav_client_->wait_for_action_server(std::chrono::seconds(5))) {
     RCLCPP_ERROR(this->get_logger(), "Nav2 action server not available!");
@@ -101,10 +101,7 @@ void NavigateToPoseInFrame::execute(
   pose_in_map.pose.position.x = global_frame_pose_.position.x + rotated_x;
   pose_in_map.pose.position.y = global_frame_pose_.position.y + rotated_y;
   pose_in_map.pose.position.z = 0.0;
-  double relative_yaw = goal->absolute
-                            ? static_cast<double>(goal->yaw)
-                            : static_cast<double>(goal->yaw) + current_yaw;
-  target_yaw_ = relative_yaw;
+  double relative_yaw = std::atan2(goal->y, goal->x);
   pose_in_map.pose.orientation.x = 0.0;
   pose_in_map.pose.orientation.y = 0.0;
   pose_in_map.pose.orientation.z = std::sin(relative_yaw / 2.0);
@@ -114,11 +111,10 @@ void NavigateToPoseInFrame::execute(
   nav_goal.pose = pose_in_map;
 
   RCLCPP_INFO(this->get_logger(),
-              "Sending goal to Nav2: frame=%s, x=%.2f, y=%.2f, yaw=%.2f rad "
-              "(absolute=%s)",
+              "Sending goal to Nav2: frame=%s, x=%.2f, y=%.2f, yaw=%.2f rad ",
               nav_goal.pose.header.frame_id.c_str(),
               nav_goal.pose.pose.position.x, nav_goal.pose.pose.position.y,
-              relative_yaw, goal->absolute ? "true" : "false");
+              relative_yaw);
 
   auto send_goal_options =
       rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
@@ -164,21 +160,10 @@ void NavigateToPoseInFrame::feedback_callback(
   last_feedback_time_ = current_time;
 
   fb_->distance_remaining = static_cast<double>(feedback->distance_remaining);
-  double current_yaw = tf2::getYaw(global_frame_pose_.orientation);
-
-  auto normalize_angle = [](double angle) {
-    while (angle > M_PI) angle -= 2.0 * M_PI;
-    while (angle < -M_PI) angle += 2.0 * M_PI;
-    return angle;
-  };
-
-  fb_->yaw_remaining = normalize_angle(target_yaw_ - current_yaw);
-
+  
   RCLCPP_INFO(this->get_logger(),
-              "Distance remaining: %.2f m, Yaw remaining: %.2f rad, Current "
-              "yaw: %.2f rad, Target yaw: %.2f rad",
-              fb_->distance_remaining, fb_->yaw_remaining, current_yaw,
-              target_yaw_);
+              "Distance remaining: %.2f m",
+              fb_->distance_remaining);
 
   active_goal_handle_->publish_feedback(fb_);
 }
@@ -186,7 +171,7 @@ void NavigateToPoseInFrame::feedback_callback(
 void NavigateToPoseInFrame::result_callback(
     const rclcpp_action::ClientGoalHandle<NavigateToPose>::WrappedResult&
         wrapped_result) {
-  auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
+  auto result = std::make_shared<MoveInFrameAction::Result>();
 
   if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
     RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");

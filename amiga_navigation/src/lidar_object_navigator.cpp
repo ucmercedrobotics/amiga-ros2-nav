@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <thread>
 #include <Eigen/Dense>
 
 #include "rclcpp/rclcpp.hpp"
@@ -34,13 +35,12 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
     lidar_topic, qos,
     std::bind(&LidarObjectNavigator::lidar_callback, this, _1));
 
-  odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-    "/odometry/filtered/local", qos,
-    std::bind(&LidarObjectNavigator::odom_callback, this, _1));
-
-  navigate_to_pose_in_frame_client_ =
-      rclcpp_action::create_client<NavigateToPoseInFrameAction>(
-          this, "navigate_to_pose_in_frame");
+  move_in_frame_client_ =
+      rclcpp_action::create_client<MoveInFrameAction>(
+          this, "move_in_frame");
+  rotate_in_frame_client_ =
+      rclcpp_action::create_client<RotateInFrameAction>(
+          this, "rotate_in_frame");
 
   action_server_ = rclcpp_action::create_server<NavigateViaLidar>(
       this, "navigate_via_lidar",
@@ -57,21 +57,6 @@ void LidarObjectNavigator::lidar_callback(
   RCLCPP_DEBUG(this->get_logger(), "Received PointCloud2 with %zu points",
                point_count);
   latest_scan_ = msg;
-}
-
-void LidarObjectNavigator::odom_callback(
-    const nav_msgs::msg::Odometry::SharedPtr msg) {
-  // Extract yaw from quaternion
-  tf2::Quaternion q(
-    msg->pose.pose.orientation.x,
-    msg->pose.pose.orientation.y,
-    msg->pose.pose.orientation.z,
-    msg->pose.pose.orientation.w
-  );
-  tf2::Matrix3x3 m(q);
-  double roll, pitch, yaw;
-  m.getRPY(roll, pitch, yaw);
-  current_yaw_ = static_cast<float>(yaw);
 }
 
 rclcpp_action::GoalResponse LidarObjectNavigator::handle_goal(
@@ -175,9 +160,9 @@ void LidarObjectNavigator::execute(
 
   if (selected_points.empty()) {
     RCLCPP_WARN(this->get_logger(), "No points found at orientation %.2f rad", theta_target);
-    result->success = false;
+    result->success = true;
     result->message = "No points found";
-    goal_handle->abort(result);
+    goal_handle->succeed(result);
     return;
   }
 
@@ -185,42 +170,45 @@ void LidarObjectNavigator::execute(
               "Found %zu points near %.2f rad. Height range: [%.2f, %.2f] m",
               selected_points.size(), theta_target, MIN_OBJECT_HEIGHT, MAX_OBJECT_HEIGHT);
 
-  float min_distance = std::numeric_limits<float>::max();
+  bool found_point = false;
   size_t closest_idx = 0;
+  float min_dist = std::numeric_limits<float>::max();
   for (size_t i = 0; i < selected_points.size(); ++i) {
     float dist = std::sqrt(selected_points[i](0) * selected_points[i](0) +
                           selected_points[i](1) * selected_points[i](1));
-    if (dist < MAX_OBJECT_DISTANCE && dist < min_distance) {
-      min_distance = dist;
+    if (dist < MAX_OBJECT_DISTANCE && dist > MIN_OBJECT_DISTANCE && dist < min_dist) {
       closest_idx = i;
+      min_dist = dist;
+      found_point = true;
     }
   }
 
-  if (min_distance >= std::numeric_limits<float>::max()) {
+  if (!found_point) {
     RCLCPP_WARN(this->get_logger(), 
                 "No points found within maximum distance of %.2f m", MAX_OBJECT_DISTANCE);
-    result->success = false;
+    result->success = true;
     result->message = "No points within range";
-    goal_handle->abort(result);
+    goal_handle->succeed(result);
     return;
   }
 
   float bx = selected_points[closest_idx](0);
   float by = selected_points[closest_idx](1);
+  float bz = selected_points[closest_idx](2);
 
   float ground_distance = std::sqrt(bx * bx + by * by);
   float object_angle = std::atan2(by, bx);
 
   RCLCPP_INFO(this->get_logger(),
-              "Object at: (x=%.3f,y=%.3f) ground_distance=%.2f m, angle=%.2f rad",
-              bx, by, ground_distance, object_angle);
+              "Object at: (x=%.3f,y=%.3f,z=%.3f) ground_distance=%.2f m, angle=%.2f rad",
+              bx, by, bz, ground_distance, object_angle);
 
-  if (!navigate_to_pose_in_frame_client_->wait_for_action_server(
+  if (!move_in_frame_client_->wait_for_action_server(
           std::chrono::seconds(5))) {
     RCLCPP_ERROR(this->get_logger(),
-                 "NavigateToPoseInFrame action server not available!");
+                 "MoveInFrame action server not available!");
     result->success = false;
-    result->message = "NavigateToPoseInFrame action server not available";
+    result->message = "MoveInFrame action server not available";
     goal_handle->abort(result);
     return;
   }
@@ -234,47 +222,96 @@ void LidarObjectNavigator::execute(
               "Sending relative move goal: (%.2f, %.2f) yaw=%.2f",
               target_x, target_y, object_angle);
 
-  auto goal_msg = NavigateToPoseInFrameAction::Goal();
-  goal_msg.x = target_x;
-  goal_msg.y = target_y;
-  goal_msg.yaw = object_angle;
-  goal_msg.absolute = false;
+  if (target_x == 0.0f && target_y == 0.0f) {
+    auto goal_msg = RotateInFrameAction::Goal();
+    goal_msg.yaw = object_angle;
+    
+    auto send_goal_options =
+        rclcpp_action::Client<RotateInFrameAction>::SendGoalOptions();
+    send_goal_options.goal_response_callback =
+        std::bind(&LidarObjectNavigator::rotate_goal_response_callback, this, _1);
+    send_goal_options.feedback_callback =
+        std::bind(&LidarObjectNavigator::rotate_feedback_callback, this, _1, _2);
+    send_goal_options.result_callback =
+        std::bind(&LidarObjectNavigator::rotate_result_callback, this, _1);
 
+    rotate_in_frame_client_->async_send_goal(goal_msg, send_goal_options);
+  }
+  else {
+    auto goal_msg = MoveInFrameAction::Goal();
+    goal_msg.x = target_x;
+    goal_msg.y = target_y;
 
-  auto send_goal_options =
-      rclcpp_action::Client<NavigateToPoseInFrameAction>::SendGoalOptions();
-  send_goal_options.goal_response_callback =
-      std::bind(&LidarObjectNavigator::goal_response_callback, this, _1);
-  send_goal_options.feedback_callback =
-      std::bind(&LidarObjectNavigator::feedback_callback, this, _1, _2);
-  send_goal_options.result_callback =
-      std::bind(&LidarObjectNavigator::result_callback, this, _1);
+    auto send_goal_options =
+        rclcpp_action::Client<MoveInFrameAction>::SendGoalOptions();
+    send_goal_options.goal_response_callback =
+        std::bind(&LidarObjectNavigator::goal_response_callback, this, _1);
+    send_goal_options.feedback_callback =
+        std::bind(&LidarObjectNavigator::feedback_callback, this, _1, _2);
+    send_goal_options.result_callback =
+        std::bind(&LidarObjectNavigator::result_callback, this, _1);
 
-  navigate_to_pose_in_frame_client_->async_send_goal(goal_msg,
-                                                     send_goal_options);
+    move_in_frame_client_->async_send_goal(goal_msg, send_goal_options);
+  }
 }
 
-void LidarObjectNavigator::goal_response_callback(
-    const GoalHandleNavigateToPoseInFrame::SharedPtr& goal_handle) {
+
+void LidarObjectNavigator::rotate_goal_response_callback(
+    const GoalHandleRotateInFrame::SharedPtr& goal_handle) {
   if (!goal_handle) {
     RCLCPP_ERROR(this->get_logger(),
-                 "Goal was rejected by NavigateToPoseInFrameAction server");
+                 "Goal was rejected by RotateInFrameAction server");
     if (active_goal_handle_) {
       auto result = std::make_shared<NavigateViaLidar::Result>();
       result->success = false;
-      result->message = "NavigateToPoseInFrameAction goal rejected";
+      result->message = "RotateInFrameAction goal rejected";
       active_goal_handle_->abort(result);
     }
   } else {
     RCLCPP_INFO(
         this->get_logger(),
-        "Goal accepted by NavigateToPoseInFrameAction server, navigating...");
+        "Goal accepted by RotateInFrameAction server, navigating...");
   }
 }
 
+void LidarObjectNavigator::goal_response_callback(
+    const GoalHandleMoveInFrame::SharedPtr& goal_handle) {
+  if (!goal_handle) {
+    RCLCPP_ERROR(this->get_logger(),
+                 "Goal was rejected by MoveInFrameAction server");
+    if (active_goal_handle_) {
+      auto result = std::make_shared<NavigateViaLidar::Result>();
+      result->success = false;
+      result->message = "MoveInFrameAction goal rejected";
+      active_goal_handle_->abort(result);
+    }
+  } else {
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Goal accepted by MoveInFrameAction server, navigating...");
+  }
+}
+
+void LidarObjectNavigator::rotate_result_callback(
+    const GoalHandleRotateInFrame::WrappedResult& result) {
+  auto action_result = std::make_shared<NavigateViaLidar::Result>();
+  if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");
+    action_result->success = true;
+    action_result->message = "Navigation succeeded";
+    active_goal_handle_->succeed(action_result);
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Navigation failed");
+    action_result->success = false;
+    action_result->message = "Navigation failed";
+    active_goal_handle_->abort(action_result);
+  }
+  active_goal_handle_.reset();
+}
+
 void LidarObjectNavigator::feedback_callback(
-    GoalHandleNavigateToPoseInFrame::SharedPtr,
-    const std::shared_ptr<const NavigateToPoseInFrameAction::Feedback>
+    GoalHandleMoveInFrame::SharedPtr,
+    const std::shared_ptr<const MoveInFrameAction::Feedback>
         feedback) {
   RCLCPP_INFO(this->get_logger(), "Distance remaining: %.2f m",
               feedback->distance_remaining);
@@ -286,7 +323,7 @@ void LidarObjectNavigator::feedback_callback(
 }
 
 void LidarObjectNavigator::result_callback(
-    const GoalHandleNavigateToPoseInFrame::WrappedResult& result) {
+    const GoalHandleMoveInFrame::WrappedResult& result) {
   auto action_result = std::make_shared<NavigateViaLidar::Result>();
   if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
     RCLCPP_INFO(this->get_logger(), "Navigation succeeded!");

@@ -7,31 +7,52 @@
 #include <cmath>
 #include <thread>
 
-#include "amiga_navigation_interfaces/action/navigate_to_pose_in_frame.hpp"
+#include "amiga_navigation_interfaces/action/move_in_frame.hpp"
+#include "amiga_navigation_interfaces/action/rotate_in_frame.hpp"
 
 namespace amiga_navigation {
 
 LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     : Node("navigate_to_pose_in_frame", options) {
-  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_raw", 10);
+  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     "/odometry/filtered/local", 1,
     std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
 
   // Parameters
-  this->declare_parameter<double>("forward_speed", MAX_LINEAR_VELOCITY);
-  this->declare_parameter<double>("angular_speed", MAX_ANGULAR_VELOCITY);
+  this->declare_parameter<double>("min_linear_velocity", min_linear_velocity_);
+  this->declare_parameter<double>("max_linear_velocity", max_linear_velocity_);
+  this->declare_parameter<double>("max_angular_velocity", max_angular_velocity_);
+  this->declare_parameter<double>("heading_tol", heading_tol_);
+  this->declare_parameter<double>("yaw_tol", yaw_tol_);
+  this->declare_parameter<double>("yaw_slowdown", yaw_slowdown_);
+  this->declare_parameter<double>("forward_speed", max_linear_velocity_);
+  this->declare_parameter<double>("angular_speed", max_angular_velocity_);
+
+  this->get_parameter("min_linear_velocity", min_linear_velocity_);
+  this->get_parameter("max_linear_velocity", max_linear_velocity_);
+  this->get_parameter("max_angular_velocity", max_angular_velocity_);
+  this->get_parameter("heading_tol", heading_tol_);
+  this->get_parameter("yaw_tol", yaw_tol_);
+  this->get_parameter("yaw_slowdown", yaw_slowdown_);
   this->get_parameter("forward_speed", forward_speed_cmd_);
   this->get_parameter("angular_speed", angular_speed_cmd_);
 
-  action_server_ = rclcpp_action::create_server<NavigateToPoseInFrameAction>(
-      this, "navigate_to_pose_in_frame",
-      std::bind(&LinearVelo::handle_goal, this, std::placeholders::_1,
-                std::placeholders::_2),
-      std::bind(&LinearVelo::handle_cancel, this, std::placeholders::_1),
-      std::bind(&LinearVelo::handle_accepted, this, std::placeholders::_1));
+    move_action_server_ = rclcpp_action::create_server<MoveInFrameAction>(
+      this, "move_in_frame",
+      std::bind(&LinearVelo::handle_move_goal, this, std::placeholders::_1,
+          std::placeholders::_2),
+      std::bind(&LinearVelo::handle_move_cancel, this, std::placeholders::_1),
+      std::bind(&LinearVelo::handle_move_accepted, this, std::placeholders::_1));
 
-  RCLCPP_INFO(get_logger(), "Linear Velocity Control Action Server ready.");
+    rotate_action_server_ = rclcpp_action::create_server<RotateInFrameAction>(
+      this, "rotate_in_frame",
+      std::bind(&LinearVelo::handle_rotate_goal, this, std::placeholders::_1,
+          std::placeholders::_2),
+      std::bind(&LinearVelo::handle_rotate_cancel, this, std::placeholders::_1),
+      std::bind(&LinearVelo::handle_rotate_accepted, this, std::placeholders::_1));
+
+    RCLCPP_INFO(get_logger(), "Linear Velocity Control Action Servers ready.");
 }
 
 void LinearVelo::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -46,63 +67,47 @@ void LinearVelo::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   current_yaw_ = yaw;
 }
 
-rclcpp_action::GoalResponse LinearVelo::handle_goal(
+rclcpp_action::GoalResponse LinearVelo::handle_move_goal(
     const rclcpp_action::GoalUUID &,
-    std::shared_ptr<const NavigateToPoseInFrameAction::Goal> goal) {
-  RCLCPP_INFO(get_logger(),
-              "Received goal: x=%.2f, y=%.2f, yaw=%.2f, absolute=%d", goal->x,
-              goal->y, goal->yaw, goal->absolute);
+    std::shared_ptr<const MoveInFrameAction::Goal> goal) {
+  RCLCPP_INFO(get_logger(), "Received move goal: x=%.2f, y=%.2f", goal->x,
+              goal->y);
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-rclcpp_action::CancelResponse LinearVelo::handle_cancel(
-    const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle) {
-  RCLCPP_WARN(get_logger(), "Goal canceled.");
+rclcpp_action::CancelResponse LinearVelo::handle_move_cancel(
+    const std::shared_ptr<GoalHandleMoveInFrame> goal_handle) {
+  RCLCPP_WARN(get_logger(), "Move goal canceled.");
   (void)goal_handle;
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
-void LinearVelo::handle_accepted(
-    const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle) {
-  std::thread{std::bind(&LinearVelo::execute, this, goal_handle)}.detach();
+void LinearVelo::handle_move_accepted(
+    const std::shared_ptr<GoalHandleMoveInFrame> goal_handle) {
+  std::thread{std::bind(&LinearVelo::execute_move, this, goal_handle)}.detach();
 }
 
-void LinearVelo::execute(
-    const std::shared_ptr<GoalHandleNavigateToPoseInFrame> goal_handle) {
+void LinearVelo::execute_move(
+    const std::shared_ptr<GoalHandleMoveInFrame> goal_handle) {
   const auto goal = goal_handle->get_goal();
-  auto feedback = std::make_shared<NavigateToPoseInFrameAction::Feedback>();
-  auto result = std::make_shared<NavigateToPoseInFrameAction::Result>();
+  auto feedback = std::make_shared<MoveInFrameAction::Feedback>();
+  auto result = std::make_shared<MoveInFrameAction::Result>();
 
-  rclcpp::Rate rate(2);
-  RCLCPP_INFO(get_logger(),
-              "Executing linear velocity goal: x=%.2f, y=%.2f, yaw=%.2f",
-              goal->x, goal->y, goal->yaw);
+  rclcpp::Rate rate(10);
+  RCLCPP_INFO(get_logger(), "Executing move goal: x=%.2f, y=%.2f", goal->x,
+              goal->y);
 
-  // Capture start pose
   const double start_x = current_x_;
   const double start_y = current_y_;
   const double start_yaw = current_yaw_;
 
-  double target_yaw = goal->yaw;
-  if (!goal->absolute) target_yaw = start_yaw + goal->yaw;
-
-  bool has_yaw_goal = std::fabs(goal->yaw) > 1e-3;
   bool position_done = false;
-  bool yaw_done = false;
   bool heading_done = false;
-  double target_x = goal->x;
-  double target_y = goal->y;
 
-  if (!goal->absolute) {
-    const double c = std::cos(start_yaw);
-    const double s = std::sin(start_yaw);
-    const double dx_w = c * goal->x - s * goal->y;
-    const double dy_w = s * goal->x + c * goal->y;
-    target_x = dx_w;
-    target_y = dy_w;
-  }
-  const double goal_vec_x = target_x;
-  const double goal_vec_y = target_y;
+  const double c = std::cos(start_yaw);
+  const double s = std::sin(start_yaw);
+  const double goal_vec_x = c * goal->x - s * goal->y;
+  const double goal_vec_y = s * goal->x + c * goal->y;
   const double target_distance =
       std::sqrt(goal_vec_x * goal_vec_x + goal_vec_y * goal_vec_y);
   const double angle_to_goal = std::atan2(goal_vec_y, goal_vec_x);
@@ -110,17 +115,11 @@ void LinearVelo::execute(
   double traveled_distance = 0.0;
   const double forward_speed_cmd = forward_speed_cmd_;
 
-  auto normalize_angle = [](double a) {
-    while (a > M_PI) a -= 2.0 * M_PI;
-    while (a < -M_PI) a += 2.0 * M_PI;
-    return a;
-  };
-
   while (rclcpp::ok()) {
     if (goal_handle->is_canceling()) {
       stop_robot();
       result->success = false;
-      result->message = "Goal canceled.";
+      result->message = "Move goal canceled.";
       goal_handle->canceled(result);
       return;
     }
@@ -134,17 +133,16 @@ void LinearVelo::execute(
     double distance_remaining =
         std::max(0.0, target_distance - traveled_distance);
     feedback->distance_remaining = distance_remaining;
-    const double yaw_error =
-      has_yaw_goal ? normalize_angle(target_yaw - current_yaw_) : 0.0;
-    feedback->yaw_remaining = has_yaw_goal ? yaw_error : 0.0f;
     goal_handle->publish_feedback(feedback);
 
     // --- Rotate-in-place to face goal ---
     if (!position_done && !heading_done) {
-      const double heading_error = atan2(sin(angle_to_goal - current_yaw_),
-                                         cos(angle_to_goal - current_yaw_));
-      if (std::fabs(heading_error) > HEADING_TOL) {
-        const double scaled = std::clamp(heading_error / YAW_SLOWDOWN, -1.0, 1.0);
+      const double heading_error =
+          atan2(sin(angle_to_goal - current_yaw_),
+                cos(angle_to_goal - current_yaw_));
+      if (std::fabs(heading_error) > heading_tol_) {
+        const double scaled =
+            std::clamp(heading_error / yaw_slowdown_, -max_angular_velocity_, max_angular_velocity_);
         cmd.angular.z = angular_speed_cmd_ * scaled;
       } else {
         heading_done = true;
@@ -152,17 +150,15 @@ void LinearVelo::execute(
     }
     // --- Translation mode ---
     else if (!position_done) {
-      if (traveled_distance < target_distance) {
-        // Scale velocity based on distance remaining - slow down as we approach
-        const double decel_distance = 2.0;  // Distance at which to start slowing down (meters)
+      if (traveled_distance < target_distance && target_distance > 0.0) {
+        const double decel_distance = 2.0;
         double speed_scale;
 
         if (distance_remaining > decel_distance) {
-          speed_scale = 1.0;  // Full speed while far away
+          speed_scale = 1.0;
         } else {
-          // Linearly interpolate from MIN to MAX velocity as we approach
           speed_scale = std::clamp(distance_remaining / decel_distance,
-                                   MIN_LINEAR_VELOCITY / MAX_LINEAR_VELOCITY,
+                                   min_linear_velocity_ / max_linear_velocity_,
                                    1.0);
         }
 
@@ -172,31 +168,93 @@ void LinearVelo::execute(
         cmd.linear.x = 0.0;
       }
     }
-    // --- Final yaw alignment ---
-    else if (has_yaw_goal) {
-      if (std::fabs(yaw_error) > YAW_TOL) {
-        const double scaled = std::clamp(yaw_error / YAW_SLOWDOWN, -1.0, 1.0);
-        cmd.angular.z = angular_speed_cmd_ * scaled;
-      } else {
-        yaw_done = true;
-      }
-    }
 
     cmd.linear.x =
-        std::clamp(cmd.linear.x, -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+      std::clamp(cmd.linear.x, -max_linear_velocity_, max_linear_velocity_);
     cmd.angular.z =
-        std::clamp(cmd.angular.z, -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY);
+      std::clamp(cmd.angular.z, -max_angular_velocity_, max_angular_velocity_);
 
     cmd_pub_->publish(cmd);
 
-    if ((position_done || (!goal->x && !goal->y)) &&
-      (!has_yaw_goal || yaw_done)) {
+    if (position_done || target_distance <= 1e-4) {
       stop_robot();
       result->success = true;
-      result->message = "Goal reached successfully.";
+      result->message = "Move goal reached successfully.";
       goal_handle->succeed(result);
       return;
     }
+
+    rate.sleep();
+  }
+}
+
+rclcpp_action::GoalResponse LinearVelo::handle_rotate_goal(
+    const rclcpp_action::GoalUUID &,
+    std::shared_ptr<const RotateInFrameAction::Goal> goal) {
+  RCLCPP_INFO(get_logger(), "Received rotate goal: yaw=%.2f, absolute=%d",
+              goal->yaw, goal->absolute);
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse LinearVelo::handle_rotate_cancel(
+    const std::shared_ptr<GoalHandleRotateInFrame> goal_handle) {
+  RCLCPP_WARN(get_logger(), "Rotate goal canceled.");
+  (void)goal_handle;
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void LinearVelo::handle_rotate_accepted(
+    const std::shared_ptr<GoalHandleRotateInFrame> goal_handle) {
+  std::thread{std::bind(&LinearVelo::execute_rotate, this, goal_handle)}.detach();
+}
+
+void LinearVelo::execute_rotate(
+    const std::shared_ptr<GoalHandleRotateInFrame> goal_handle) {
+  const auto goal = goal_handle->get_goal();
+  auto feedback = std::make_shared<RotateInFrameAction::Feedback>();
+  auto result = std::make_shared<RotateInFrameAction::Result>();
+
+  rclcpp::Rate rate(10);
+  RCLCPP_INFO(get_logger(), "Executing rotate goal: yaw=%.2f (absolute=%d)",
+              goal->yaw, goal->absolute);
+
+  const double start_yaw = current_yaw_;
+  const double target_yaw = goal->absolute ? goal->yaw : (start_yaw + goal->yaw);
+
+  auto normalize_angle = [](double a) {
+    while (a > M_PI) a -= 2.0 * M_PI;
+    while (a < -M_PI) a += 2.0 * M_PI;
+    return a;
+  };
+
+  while (rclcpp::ok()) {
+    if (goal_handle->is_canceling()) {
+      stop_robot();
+      result->success = false;
+      result->message = "Rotate goal canceled.";
+      goal_handle->canceled(result);
+      return;
+    }
+
+    geometry_msgs::msg::Twist cmd;
+    const double yaw_error = normalize_angle(target_yaw - current_yaw_);
+    feedback->yaw_remaining = yaw_error;
+    goal_handle->publish_feedback(feedback);
+
+    if (std::fabs(yaw_error) > yaw_tol_) {
+      const double scaled = std::clamp(yaw_error / yaw_slowdown_, -1.0, 1.0);
+      cmd.angular.z = angular_speed_cmd_ * scaled;
+    } else {
+      stop_robot();
+      result->success = true;
+      result->message = "Rotate goal reached successfully.";
+      goal_handle->succeed(result);
+      return;
+    }
+
+    cmd.angular.z =
+      std::clamp(cmd.angular.z, -max_angular_velocity_, max_angular_velocity_);
+    cmd_pub_->publish(cmd);
 
     rate.sleep();
   }
