@@ -33,10 +33,10 @@ controller_server:
       stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 3.14
+      yaw_goal_tolerance: 0.25
     FollowPath:
       plugin: "nav2_rotation_shim_controller::RotationShimController"
-      angular_dist_threshold: 0.25
+      angular_dist_threshold: 3.14
       rotate_to_heading_angular_vel: 0.5
       rotate_to_goal_heading: true
 
