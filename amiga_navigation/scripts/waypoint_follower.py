@@ -18,7 +18,7 @@ from tf_transformations import euler_from_quaternion
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
 from amiga_interfaces.srv import GetTreeInfo
 
-DISTANCE_TOLERANCE: float = 1.5  # meters
+DISTANCE_TOLERANCE: float = 2.0  # meters
 
 
 class WaypointFollowerActionServer(Node):
@@ -338,23 +338,22 @@ class WaypointFollowerActionServer(Node):
                 goal_handle.publish_feedback(feedback_msg)
                 rclpy.spin_once(self, timeout_sec=0.5)
 
-        object_angle = 0.0
-        if tree_utm is not None:
-            object_angle = np.arctan2(
-                tree_utm[1] - self.utm_position[1],
-                tree_utm[0] - self.utm_position[0],
-            )
-        else:
-            self.get_logger().warn("Tree lat/lon unavailable; object_angle set to 0")
+        if approach_tree:
+            object_angle = 0.0
+            if tree_utm is not None:
+                object_angle = np.arctan2(
+                    tree_utm[1] - self.utm_position[1],
+                    tree_utm[0] - self.utm_position[0],
+                )
+            else:
+                self.get_logger().warn("Tree lat/lon unavailable; object_angle set to 0")
 
-        theta_robot = self.robot_yaw_world
-        self.get_logger().info(f"Approaching tree via LIDAR navigation at absolute angle {object_angle} facing {theta_robot}")
+            theta_robot = self.robot_yaw_world
+            self.get_logger().info(f"Approaching tree via LIDAR navigation at absolute angle {object_angle} facing {theta_robot}")
 
-        object_angle = object_angle - theta_robot
+            object_angle = object_angle - theta_robot
 
-        time.sleep(5.0)
-        
-        if approach_tree: 
+            time.sleep(5.0)
             self.get_logger().info(f"Approaching tree via LIDAR navigation at relative angle {object_angle}")
             while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
                 self.get_logger().info("Waiting for NavigateViaLidar action server...")

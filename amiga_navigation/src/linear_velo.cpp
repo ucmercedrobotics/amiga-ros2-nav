@@ -14,7 +14,7 @@ namespace amiga_navigation {
 
 LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     : Node("navigate_to_pose_in_frame", options) {
-  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+  cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_raw", 10);
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     "/odometry/filtered/local", 1,
     std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
@@ -26,6 +26,7 @@ LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
   this->declare_parameter<double>("heading_tol", heading_tol_);
   this->declare_parameter<double>("yaw_tol", yaw_tol_);
   this->declare_parameter<double>("yaw_slowdown", yaw_slowdown_);
+  this->declare_parameter<double>("yaw_offset", yaw_offset_);
   this->declare_parameter<double>("forward_speed", max_linear_velocity_);
   this->declare_parameter<double>("angular_speed", max_angular_velocity_);
 
@@ -35,6 +36,7 @@ LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
   this->get_parameter("heading_tol", heading_tol_);
   this->get_parameter("yaw_tol", yaw_tol_);
   this->get_parameter("yaw_slowdown", yaw_slowdown_);
+  this->get_parameter("yaw_offset", yaw_offset_);
   this->get_parameter("forward_speed", forward_speed_cmd_);
   this->get_parameter("angular_speed", angular_speed_cmd_);
 
@@ -219,7 +221,7 @@ void LinearVelo::execute_rotate(
               goal->yaw, goal->absolute);
 
   const double start_yaw = current_yaw_;
-  const double target_yaw = goal->absolute ? goal->yaw : (start_yaw + goal->yaw);
+  const double target_yaw = goal->absolute ? (goal->yaw + yaw_offset_)  : (start_yaw + goal->yaw);
 
   auto normalize_angle = [](double a) {
     while (a > M_PI) a -= 2.0 * M_PI;
