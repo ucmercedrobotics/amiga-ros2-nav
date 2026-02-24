@@ -11,15 +11,15 @@ bt_navigator:
     navigate_through_poses:
       plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
     error_code_names:
-      - compute_path_error_code
+      - compute_path_error_code 
       - follow_path_error_code
 
 controller_server:
   ros__parameters:
-    controller_frequency: 10.0
-    min_x_velocity_threshold: 0.2
-    min_y_velocity_threshold: 0.2
-    min_theta_velocity_threshold: 0.3
+    controller_frequency: 5.0
+    min_x_velocity_threshold: 0.05
+    min_y_velocity_threshold: 0.05
+    min_theta_velocity_threshold: 0.1
     failure_tolerance: 0.3
     odom_topic: /odometry/filtered/local   # Topic to get instantaneous measurement of speed from
     progress_checker_plugin: "progress_checker"
@@ -30,19 +30,19 @@ controller_server:
       required_movement_radius: 0.2
       movement_time_allowance: 30.0
     goal_checker:
-      stateful: False
+      stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      yaw_goal_tolerance: 3.14
     FollowPath:
-      plugin: "nav2_rotation_shim_controller::RotationShimController"
-      angular_dist_threshold: 0.25
-      rotate_to_heading_angular_vel: 0.5
-      rotate_to_goal_heading: true
-
-      primary_controller:
-        plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-        approach_velocity_scaling_dist: 2.0
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.5
+      lookahead_dist: 1.5
+      min_lookahead_dist: 0.8
+      max_lookahead_dist: 2.5
+      use_velocity_scaled_lookahead_dist: true
+      use_rotate_to_heading: true     
+      approach_velocity_scaling_dist: 1.0
 
 local_costmap:
   local_costmap:
@@ -52,8 +52,8 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_link
       rolling_window: true
-      width: 5
-      height: 5
+      width: 8
+      height: 8
       footprint: "[ [-0.57, 0.7], [0.57, 0.7], [0.57, -0.7], [-0.57, -0.7] ]"
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
@@ -64,23 +64,23 @@ local_costmap:
           topic: /oak0/points
           data_type: PointCloud2
           expected_update_rate: 1.0
-          min_obstacle_height: 0.5
+          min_obstacle_height: 0.3
           max_obstacle_height: 1.5
           marking: true
           clearing: true
           obstacle_max_range: 5.0
-          obstacle_min_range: 1.5
+          obstacle_min_range: 1.0
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.6
+        cost_scaling_factor: 10.0
+        inflation_radius: 2.0
 
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 1.0
+      update_frequency: 2.0
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
@@ -98,24 +98,28 @@ global_costmap:
           topic: /oak0/points
           data_type: PointCloud2
           expected_update_rate: 1.0
-          min_obstacle_height: 0.5
+          min_obstacle_height: 0.3
           max_obstacle_height: 1.5
           marking: true
           clearing: true
           obstacle_max_range: 5.0
-          obstacle_min_range: 1.5
+          obstacle_min_range: 1.0
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.6
+        cost_scaling_factor: 10.0
+        inflation_radius: 2.0
 
 planner_server:
   ros__parameters:
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_theta_star_planner/ThetaStarPlanner"
+      # plugin: "nav2_theta_star_planner/ThetaStarPlanner"
+      # allow_unknown: true
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: true
       allow_unknown: true
 
 collision_monitor:

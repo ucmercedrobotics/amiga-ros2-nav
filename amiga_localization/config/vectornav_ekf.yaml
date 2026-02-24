@@ -90,6 +90,8 @@ navsat_transform_node:
 
         wait_for_datum: true
         # Users can specify the origin manually
+        # Castle
+        #datum: [37.373989, -120.578204, 0.0]
         # Merced (UCM, Prof. Ehsani)
         datum: [37.3611, -120.4322, 0.0]
         # Shiraz Ranch

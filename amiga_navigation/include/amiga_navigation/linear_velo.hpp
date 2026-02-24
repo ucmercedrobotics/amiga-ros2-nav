@@ -61,6 +61,7 @@ class LinearVelo : public rclcpp::Node {
   double heading_tol_ = 0.2;
   double yaw_tol_ = 0.2;
   double yaw_slowdown_ = 1.0;
+  double yaw_offset_ = 0.0;
   double forward_speed_cmd_ = 0.0;
   double angular_speed_cmd_ = 0.0;
 };
