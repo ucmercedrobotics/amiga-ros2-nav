@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/RotateInFrame.action"
   "action/FollowPerson.action"
   "action/TreeIDWaypoint.action"
+  "action/MoveToAisleHead.action"
   DEPENDENCIES geometry_msgs
 )
 
