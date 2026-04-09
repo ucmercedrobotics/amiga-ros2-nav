@@ -15,7 +15,7 @@ from sensor_msgs.msg import NavSatFix
 from nav_msgs.msg import Odometry
 from tf_transformations import euler_from_quaternion
 
-from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar
+from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar, MoveToAisleHead
 from amiga_interfaces.srv import GetTreeInfo
 
 DISTANCE_TOLERANCE: float = 2.0  # meters
@@ -76,6 +76,13 @@ class WaypointFollowerActionServer(Node):
             action_type=TreeIDWaypoint,
             action_name="follow_tree_id_waypoint",
             execute_callback=self.goto_treeid_callback,
+        )
+
+        self._action_server_aisle_head = ActionServer(
+            node=self,
+            action_type=TreeIDWaypoint,
+            action_name="move_to_aisle_head",
+            execute_callback=self.move_to_aisle_head_callback,
         )
 
         self._navigate_via_lidar_client = ActionClient(
@@ -250,31 +257,7 @@ class WaypointFollowerActionServer(Node):
         tree_lat = record.get("lat")
         tree_lon = record.get("lon")
 
-        def latlon_from_item(item):
-            if isinstance(item, dict):
-                lat = item.get("lat")
-                lon = item.get("lon")
-                if lat is not None and lon is not None:
-                    return float(lat), float(lon)
-            elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                return float(item[0]), float(item[1])
-            return None
-
-        candidate_latlon = None
-        candidate_utm = None
-
-        if isinstance(row_wps, list) and row_wps:
-            min_dist = float("inf")
-            for item in row_wps:
-                ll = latlon_from_item(item)
-                if ll is None:
-                    continue
-                utm_wp = utm.from_latlon(ll[0], ll[1])
-                d = math.dist([self.utm_position[0], self.utm_position[1]], [utm_wp[0], utm_wp[1]])
-                if d < min_dist:
-                    min_dist = d
-                    candidate_latlon = ll
-                    candidate_utm = utm_wp
+        candidate_latlon, candidate_utm = self.select_closest_point(row_wps)
 
         if candidate_latlon is None or candidate_utm is None:
             self.get_logger().error("No valid target waypoint available from orchard data")
@@ -311,23 +294,11 @@ class WaypointFollowerActionServer(Node):
                 f"Navigating to row waypoint near tree {tree_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
             )
 
-            goal_pose = PoseStamped()
-            goal_pose.header.frame_id = "utm"
-            goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
-            goal_pose.pose.position.x = candidate_utm[0]
-            goal_pose.pose.position.y = candidate_utm[1]
-
-            yaw = np.arctan2(
-                candidate_utm[1] - self.utm_position[1], candidate_utm[0] - self.utm_position[0]
-            )
-            goal_pose.pose.orientation.w = np.cos(yaw / 2)
-            goal_pose.pose.orientation.z = np.sin(yaw / 2)
-
             self.get_logger().info(
                 f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
             )
 
-            self.navigator.followWaypoints([goal_pose])
+            self.navigate_to_utm(candidate_utm)
 
             while not self.navigator.isTaskComplete():
                 feedback_msg.dist = math.dist(
@@ -388,7 +359,137 @@ class WaypointFollowerActionServer(Node):
         result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
         result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
         return result
+        
 
+    def move_to_aisle_head_callback(self, goal_handle):
+        
+        feedback_msg = MoveToAisleHead.Feedback()
+
+        aisle_id = int(goal_handle.request.aisle_id)
+        self.get_logger().info(f"Received AisleID: {aisle_id}")
+        result = MoveToAisleHead.Result()
+
+        while not self.utm_position:
+            self.get_logger().info("waiting for current location...")
+            rclpy.spin_once(self)
+
+        # first we gather information about the tree in question
+        if not self._tree_info_client.wait_for_service(timeout_sec=5.0):
+            self.get_logger().error("Orchard GetTreeInfo service unavailable")
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
+        req = GetTreeInfo.Request()
+        req.index_type = GetTreeInfo.Request.AISLE_INDEX
+        req.indicies = [aisle_id]
+        # no fields needed. everything will return
+
+        future = self._tree_info_client.call_async(req)
+        while not future.done():
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        response = future.result()
+        if response is None or not hasattr(response, "json"):
+            self.get_logger().error("Invalid response from GetTreeInfo")
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
+        try:
+            data = json.loads(response.json)
+        except Exception as e:
+            self.get_logger().error(f"Failed parsing GetTreeInfo JSON: {e}")
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
+        record = None
+        if isinstance(data, list) and data:
+            record = data[0]
+        elif isinstance(data, dict):
+            record = data
+
+        if record is None:
+            self.get_logger().error("GetTreeInfo returned empty result")
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
+        aisle_heads = record.get("aisle_entrances", [])
+
+        candidate_latlon, candidate_utm = self.select_closest_point(aisle_heads)
+
+        if candidate_latlon is None or candidate_utm is None:
+            self.get_logger().error("No valid target waypoint available from orchard data")
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
+        self.get_logger().info(
+            f"Navigating to aisle head {aisle_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
+        )
+
+        self.navigate_to_utm(candidate_utm)
+
+        self.get_logger().info(
+            f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
+        )
+
+        while not self.navigator.isTaskComplete():
+            feedback_msg.dist = math.dist(
+                [self.utm_position[0], self.utm_position[1]],
+                [goal_pose.pose.position.x, goal_pose.pose.position.y],
+            )
+            self.get_logger().info("distance to goal %f" % feedback_msg.dist)
+            goal_handle.publish_feedback(feedback_msg)
+            rclpy.spin_once(self, timeout_sec=0.5)
+
+
+    def navigate_to_utm(self, utm_coord):
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = "utm"
+        goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        goal_pose.pose.position.x = utm_coord[0]
+        goal_pose.pose.position.y = utm_coord[1]
+
+        yaw = np.arctan2(
+            utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
+        )
+        goal_pose.pose.orientation.w = np.cos(yaw / 2)
+        goal_pose.pose.orientation.z = np.sin(yaw / 2)
+
+        self.navigator.followWaypoints([goal_pose])
+
+
+    def select_closest_point(self, points):
+        closest_point = None
+        min_dist = float("inf")
+        for item in points:
+            ll = self.latlon_from_item(item)
+            if ll is None:
+                continue
+            utm_point = utm.from_latlon(ll[0], ll[1])
+            d = math.dist([self.utm_position[0], self.utm_position[1]], [utm_point[0], utm_point[1]])
+            if d < min_dist:
+                min_dist = d
+                closest_point = (ll, utm_point)
+        return closest_point
+
+    def latlon_from_item(self, item):
+        if isinstance(item, dict):
+            lat = item.get("lat")
+            lon = item.get("lon")
+            if lat is not None and lon is not None:
+                return float(lat), float(lon)
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            return float(item[0]), float(item[1])
+        return None
 
 def main(args=None):
     rclpy.init(args=args)
