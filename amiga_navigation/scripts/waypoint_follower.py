@@ -80,7 +80,7 @@ class WaypointFollowerActionServer(Node):
 
         self._action_server_aisle_head = ActionServer(
             node=self,
-            action_type=TreeIDWaypoint,
+            action_type=MoveToAisleHead,
             action_name="move_to_aisle_head",
             execute_callback=self.move_to_aisle_head_callback,
         )
@@ -294,16 +294,12 @@ class WaypointFollowerActionServer(Node):
                 f"Navigating to row waypoint near tree {tree_id}: {candidate_latlon[0]:.6f}, {candidate_latlon[1]:.6f}"
             )
 
-            self.get_logger().info(
-                f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
-            )
-
             self.navigate_to_utm(candidate_utm)
 
             while not self.navigator.isTaskComplete():
                 feedback_msg.dist = math.dist(
                     [self.utm_position[0], self.utm_position[1]],
-                    [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                    [candidate_utm[0], candidate_utm[1]],
                 )
                 self.get_logger().info("distance to goal %f" % feedback_msg.dist)
                 goal_handle.publish_feedback(feedback_msg)
@@ -437,18 +433,21 @@ class WaypointFollowerActionServer(Node):
 
         self.navigate_to_utm(candidate_utm)
 
-        self.get_logger().info(
-            f"Desired orientation: {(goal_pose.pose.orientation.z, goal_pose.pose.orientation.w)} and yaw: {yaw} rad"
-        )
-
         while not self.navigator.isTaskComplete():
             feedback_msg.dist = math.dist(
                 [self.utm_position[0], self.utm_position[1]],
-                [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                [candidate_utm[0], candidate_utm[1]],
             )
             self.get_logger().info("distance to goal %f" % feedback_msg.dist)
             goal_handle.publish_feedback(feedback_msg)
             rclpy.spin_once(self, timeout_sec=0.5)
+
+        goal_handle.succeed()
+        self.get_logger().info(f"Aisle head waypoint finished with: {self.navigator.getResult()}")
+
+        result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+        result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+        return result
 
 
     def navigate_to_utm(self, utm_coord):
