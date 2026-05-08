@@ -379,7 +379,7 @@ class WaypointFollowerActionServer(Node):
 
         req = GetTreeInfo.Request()
         req.index_type = GetTreeInfo.Request.AISLE_INDEX
-        req.indicies = [aisle_id]
+        req.indicies = [aisle_id - 1, aisle_id]
         # no fields needed. everything will return
 
         future = self._tree_info_client.call_async(req)
