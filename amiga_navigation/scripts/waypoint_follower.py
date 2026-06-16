@@ -12,8 +12,8 @@ from rclpy.node import Node
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
-from nav_msgs.msg import Odometry
 from tf_transformations import euler_from_quaternion
+from nav_msgs.msg import Odometry
 
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar, MoveToAisleHead
 from amiga_interfaces.srv import GetTreeInfo
@@ -39,6 +39,10 @@ class WaypointFollowerActionServer(Node):
         # for north facing IMU VectorNav
         self.declare_parameter("yaw_offset", math.pi/2)
         self.yaw_offset = self.get_parameter("yaw_offset").value
+        self.declare_parameter("orchard_tree_service", "/orchard/get_tree_info")
+        service_name = (
+            self.get_parameter("orchard_tree_service").get_parameter_value().string_value
+        )
 
         self.navigator = BasicNavigator()
 
@@ -65,10 +69,13 @@ class WaypointFollowerActionServer(Node):
             execute_callback=self.goto_callback,
         )
 
-        self.declare_parameter("orchard_tree_service", "/orchard/get_tree_info")
-        service_name = (
-            self.get_parameter("orchard_tree_service").get_parameter_value().string_value
+        self._action_server_approach_gps = ActionServer(
+            node=self,
+            action_type=GPSWaypoint,
+            action_name="approach_gps_waypoints",
+            execute_callback=self.approach_gps_callback,
         )
+
         self._tree_info_client = self.create_client(GetTreeInfo, service_name)
 
         self._action_server_treeid_follow = ActionServer(
@@ -142,19 +149,19 @@ class WaypointFollowerActionServer(Node):
             goal_handle.request.lat, goal_handle.request.lon
         )
 
+        while not self.utm_position:
+            self.get_logger().info("waiting for current location...")
+            rclpy.spin_once(self)
+
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = "utm"
         goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
         goal_pose.pose.position.x = utm_coord[0]
         goal_pose.pose.position.y = utm_coord[1]
 
-        while not self.utm_position:
-            self.get_logger().info("waiting for current location...")
-            rclpy.spin_once(self)
-
         yaw = np.arctan2(
             utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
-        )
+        ) - self.yaw_offset
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
@@ -176,6 +183,76 @@ class WaypointFollowerActionServer(Node):
         goal_handle.succeed()
         self.get_logger().info(f"Waypoint finished with: {self.navigator.getResult()}")
 
+        result = GPSWaypoint.Result()
+        result.lat = self.gps_position[0]
+        result.lon = self.gps_position[1]
+        return result
+
+    def approach_gps_callback(self, goal_handle):
+        """
+        Similar to goto_callback but with a different feedback and result message, used when the robot needs to approach a gps waypoint without necessarily reaching it (e.g. for tree approach)
+
+        Args:
+        goal_handle (GPSWaypoint): new waypoint to approach expressed in gps coordinates
+        (provided by the action client)
+
+        Returns:
+        result (GPSWaypoint.result): current gps position of the robot at completion and object angle to target
+        """
+        feedback_msg = GPSWaypoint.Feedback()
+
+        self.get_logger().info(
+            "approaching: %f, %f" % (goal_handle.request.lat, goal_handle.request.lon)
+        )
+        utm_coord = utm.from_latlon(
+            goal_handle.request.lat, goal_handle.request.lon
+        )
+
+        while not self.utm_position:
+            self.get_logger().info("waiting for current location...")
+            rclpy.spin_once(self)
+
+        object_angle = np.arctan2(
+            utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
+        )
+        theta_robot = self.robot_yaw_world
+        self.get_logger().info(f"Approaching GPS waypoint via LIDAR navigation at absolute angle {object_angle} facing {theta_robot}")
+
+        object_angle = object_angle - theta_robot
+
+        time.sleep(5.0)
+        self.get_logger().info(f"Approaching GPS waypoint via LIDAR navigation at relative angle {object_angle}")
+        while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().info("Waiting for NavigateViaLidar action server...")
+        nav_goal = NavigateViaLidar.Goal()
+        nav_goal.object_angle = object_angle
+        future = self._navigate_via_lidar_client.send_goal_async(nav_goal)
+        while not future.done():
+            rclpy.spin_once(self, timeout_sec=0.1)
+        goal_handle_nav = future.result()
+        if not goal_handle_nav.accepted:
+            self.get_logger().error("NavigateViaLidar action goal rejected")
+            goal_handle.abort()
+            result = GPSWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+        
+        result_future = goal_handle_nav.get_result_async()
+        while not result_future.done():
+            rclpy.spin_once(self, timeout_sec=0.1)
+        nav_result = result_future.result()
+        if nav_result is None or not nav_result.result.success:
+            self.get_logger().error("NavigateViaLidar action failed")
+            goal_handle.abort()
+            result = GPSWaypoint.Result()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+        self.get_logger().info("Successfully approached GPS waypoint via LIDAR navigation")
+
+        goal_handle.succeed()
+        
         result = GPSWaypoint.Result()
         result.lat = self.gps_position[0]
         result.lon = self.gps_position[1]
@@ -459,7 +536,7 @@ class WaypointFollowerActionServer(Node):
 
         yaw = np.arctan2(
             utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
-        )
+        ) - self.yaw_offset
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
