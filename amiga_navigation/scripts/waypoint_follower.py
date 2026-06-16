@@ -12,8 +12,8 @@ from rclpy.node import Node
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
-from nav_msgs.msg import Odometry
 from tf_transformations import euler_from_quaternion
+from nav_msgs.msg import Odometry
 
 from amiga_navigation_interfaces.action import GPSWaypoint, TreeIDWaypoint, NavigateViaLidar, MoveToAisleHead
 from amiga_interfaces.srv import GetTreeInfo
@@ -149,19 +149,19 @@ class WaypointFollowerActionServer(Node):
             goal_handle.request.lat, goal_handle.request.lon
         )
 
+        while not self.utm_position:
+            self.get_logger().info("waiting for current location...")
+            rclpy.spin_once(self)
+
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = "utm"
         goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
         goal_pose.pose.position.x = utm_coord[0]
         goal_pose.pose.position.y = utm_coord[1]
 
-        while not self.utm_position:
-            self.get_logger().info("waiting for current location...")
-            rclpy.spin_once(self)
-
         yaw = np.arctan2(
             utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
-        )
+        ) - self.yaw_offset
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
@@ -220,6 +220,7 @@ class WaypointFollowerActionServer(Node):
 
         object_angle = object_angle - theta_robot
 
+        time.sleep(5.0)
         self.get_logger().info(f"Approaching GPS waypoint via LIDAR navigation at relative angle {object_angle}")
         while not self._navigate_via_lidar_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().info("Waiting for NavigateViaLidar action server...")
@@ -249,6 +250,13 @@ class WaypointFollowerActionServer(Node):
             result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
             return result
         self.get_logger().info("Successfully approached GPS waypoint via LIDAR navigation")
+
+        goal_handle.succeed()
+        
+        result = GPSWaypoint.Result()
+        result.lat = self.gps_position[0]
+        result.lon = self.gps_position[1]
+        return result
 
     def goto_treeid_callback(self, goal_handle):
         """
@@ -528,7 +536,7 @@ class WaypointFollowerActionServer(Node):
 
         yaw = np.arctan2(
             utm_coord[1] - self.utm_position[1], utm_coord[0] - self.utm_position[0]
-        )
+        ) - self.yaw_offset
         goal_pose.pose.orientation.w = np.cos(yaw / 2)
         goal_pose.pose.orientation.z = np.sin(yaw / 2)
 
