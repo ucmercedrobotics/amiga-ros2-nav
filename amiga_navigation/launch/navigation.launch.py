@@ -9,9 +9,11 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
 from nav2_common.launch import RewrittenYaml
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
+    use_sim_time = LaunchConfiguration("use_sim_time")
     # Get the launch directory
     nav2_bringup_dir = get_package_share_directory('nav2_bringup')
     amiga_navigation_dir = get_package_share_directory(
@@ -30,7 +32,7 @@ def generate_launch_description():
             os.path.join(nav2_bringup_dir, "launch", "navigation_launch.py")
         ),
         launch_arguments={
-            "use_sim_time": "False",
+            "use_sim_time": use_sim_time,
             "params_file": configured_params,
             "autostart": "True",
             "log_level": "info",
@@ -42,7 +44,10 @@ def generate_launch_description():
         executable="collision_monitor",
         name="collision_monitor",
         output="screen",
-        parameters=[configured_params],
+        parameters=[
+            configured_params,
+            {"use_sim_time": ParameterValue(use_sim_time, value_type=bool)},
+        ],
     )
 
     collision_monitor_lifecycle = Node(
@@ -51,10 +56,21 @@ def generate_launch_description():
         name="collision_monitor_lifecycle_manager",
         output="screen",
         parameters=[
-            {"use_sim_time": False},
+            {"use_sim_time": ParameterValue(use_sim_time, value_type=bool)},
             {"autostart": True},
             {"node_names": ["collision_monitor"]},
         ],
     )
 
-    return LaunchDescription([nav2_launch, collision_monitor_node, collision_monitor_lifecycle])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "use_sim_time",
+                default_value="False",
+                description="Use simulated clock (true when running under Gazebo)",
+            ),
+            nav2_launch,
+            collision_monitor_node,
+            collision_monitor_lifecycle,
+        ]
+    )
