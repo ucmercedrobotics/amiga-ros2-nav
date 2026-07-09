@@ -15,8 +15,11 @@ namespace amiga_navigation {
 LinearVelo::LinearVelo(const rclcpp::NodeOptions &options)
     : Node("navigate_to_pose_in_frame", options) {
   cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_raw", 10);
+
+  std::string odom_topic =
+    this->declare_parameter<std::string>("odom_topic", "/odometry/filtered/local");
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-    "/odometry/filtered/local", 1,
+    odom_topic, 1,
     std::bind(&LinearVelo::odom_callback, this, std::placeholders::_1));
 
   // Parameters
