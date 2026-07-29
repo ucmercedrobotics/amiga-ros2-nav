@@ -12,12 +12,6 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
-#define AZIMUTH_TOLERANCE 0.5f
-#define MIN_OBJECT_HEIGHT 0.5f
-#define MAX_OBJECT_HEIGHT 1.5f
-#define MIN_OBJECT_DISTANCE 1.0f
-#define MAX_OBJECT_DISTANCE 5.0f
-
 namespace amiga_navigation {
 
 class LidarObjectNavigator : public rclcpp::Node {
@@ -79,6 +73,13 @@ class LidarObjectNavigator : public rclcpp::Node {
     float safety_distance_;
     float lidar_offset_distance_;
     float current_yaw_ = 0.0f;
+
+    // Object selection tuning (ROS parameters).
+    float azimuth_tolerance_;
+    float min_object_height_;
+    float max_object_height_;
+    float min_object_distance_;
+    float max_object_distance_;
 
     std::shared_ptr<GoalHandleNavigateViaLidar> active_goal_handle_;
 };

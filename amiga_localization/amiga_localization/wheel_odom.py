@@ -99,6 +99,11 @@ class WheelOdometryNode(Node):
         # self.update(msg)
         self.update_raw(msg)
         odom_msg = self.create_odom_msg()
+        # Stamp with the incoming twist's time (monotonic, sim-time consistent).
+        # update_raw() never advances self.current_time, so relying on it would
+        # freeze the stamp at node startup and the EKF would reject every
+        # subsequent measurement.
+        odom_msg.header.stamp = msg.header.stamp
         self.wheel_odom_publisher.publish(odom_msg)
         self.get_logger().debug(
             f"Wheel Odometry: x={self.x}, y={self.y}, theta={self.theta}, v={self.v}, omega={self.omega}"

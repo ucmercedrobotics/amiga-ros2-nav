@@ -22,10 +22,20 @@ LidarObjectNavigator::LidarObjectNavigator(const rclcpp::NodeOptions& options)
   this->declare_parameter<std::string>("base_frame", "base_link");
   this->declare_parameter<std::string>("lidar_link", "lidar_link");
   this->declare_parameter<double>("safety_distance", 1.25);
+  this->declare_parameter<double>("azimuth_tolerance", 0.5);
+  this->declare_parameter<double>("min_object_height", 0.5);
+  this->declare_parameter<double>("max_object_height", 1.5);
+  this->declare_parameter<double>("min_object_distance", 1.0);
+  this->declare_parameter<double>("max_object_distance", 5.0);
   std::string lidar_topic = this->get_parameter("lidar_topic").as_string();
   base_frame_ = this->get_parameter("base_frame").as_string();
   lidar_link_ = this->get_parameter("lidar_link").as_string();
   safety_distance_ = this->get_parameter("safety_distance").as_double();
+  azimuth_tolerance_ = this->get_parameter("azimuth_tolerance").as_double();
+  min_object_height_ = this->get_parameter("min_object_height").as_double();
+  max_object_height_ = this->get_parameter("max_object_height").as_double();
+  min_object_distance_ = this->get_parameter("min_object_distance").as_double();
+  max_object_distance_ = this->get_parameter("max_object_distance").as_double();
 
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -92,7 +102,7 @@ void LidarObjectNavigator::execute(
 
   auto result = std::make_shared<NavigateViaLidar::Result>();
   double theta_target = goal_handle->get_goal()->object_angle;
-  double azimuth_tolerance = AZIMUTH_TOLERANCE; 
+  double azimuth_tolerance = azimuth_tolerance_;
 
   const auto &pc = *latest_scan_;
 
@@ -152,7 +162,7 @@ void LidarObjectNavigator::execute(
                             std::cos(azimuth - theta_target));
 
     if (std::fabs(diff) < azimuth_tolerance) {
-      if (bz > MIN_OBJECT_HEIGHT && bz < MAX_OBJECT_HEIGHT) {
+      if (bz > min_object_height_ && bz < max_object_height_) {
         selected_points.emplace_back(bx, by, bz);
       }
     }
@@ -168,7 +178,7 @@ void LidarObjectNavigator::execute(
 
   RCLCPP_INFO(this->get_logger(),
               "Found %zu points near %.2f rad. Height range: [%.2f, %.2f] m",
-              selected_points.size(), theta_target, MIN_OBJECT_HEIGHT, MAX_OBJECT_HEIGHT);
+              selected_points.size(), theta_target, min_object_height_, max_object_height_);
 
   bool found_point = false;
   size_t closest_idx = 0;
@@ -176,7 +186,7 @@ void LidarObjectNavigator::execute(
   for (size_t i = 0; i < selected_points.size(); ++i) {
     float dist = std::sqrt(selected_points[i](0) * selected_points[i](0) +
                           selected_points[i](1) * selected_points[i](1));
-    if (dist < MAX_OBJECT_DISTANCE && dist > MIN_OBJECT_DISTANCE && dist < min_dist) {
+    if (dist < max_object_distance_ && dist > min_object_distance_ && dist < min_dist) {
       closest_idx = i;
       min_dist = dist;
       found_point = true;
@@ -185,7 +195,7 @@ void LidarObjectNavigator::execute(
 
   if (!found_point) {
     RCLCPP_WARN(this->get_logger(), 
-                "No points found within maximum distance of %.2f m", MAX_OBJECT_DISTANCE);
+                "No points found within maximum distance of %.2f m", max_object_distance_);
     result->success = true;
     result->message = "No points within range";
     goal_handle->succeed(result);
