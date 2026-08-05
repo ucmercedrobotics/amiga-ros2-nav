@@ -1,4 +1,9 @@
-wheel_odometry_node:
+# Quoted "**/" wildcard, no leading slash (not bare name) so this file's
+# parameters load correctly for both the unnamespaced robot1 node and a
+# namespaced robot2 one (FQN /amiga2/wheel_odometry_node) — see
+# base_ekf.yaml for the same pattern and why it's quoted with no leading
+# slash.
+"**/wheel_odometry_node":
   ros__parameters:
     wheel_params:
       wheel_radius: 0.21

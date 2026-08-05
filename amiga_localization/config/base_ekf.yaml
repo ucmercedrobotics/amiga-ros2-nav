@@ -5,8 +5,19 @@
 # TODO: Covariance Matrices
 # TODO: Acceleration/Deceleration Kinematics
 
+# Top-level keys use the "**/<name>" wildcard (quoted, no leading slash, not
+# bare <name>) because this same file is shared by both the unnamespaced
+# robot1 nodes (FQN /ekf_local_filter_node etc.) and namespaced robot2 ones
+# (FQN /amiga2/ekf_local_filter_node etc., see ekf.launch.py) — a bare key
+# only matches a root-namespace node, so a namespaced node would silently
+# load none of these parameters (no odom0/imu0 inputs, etc.).
+# - No leading slash: rcl resolves a key as <node namespace>/<key>, so a
+#   leading "/" here produces an invalid double slash ("/amiga2//**/...").
+# - Quoted: plain (unquoted) YAML treats a leading "*" as an alias
+#   reference, so "**/name:" unquoted is a YAML syntax error, not a wildcard.
+
 # -- Local EKF Filter (Odom)
-ekf_local_filter_node:
+"**/ekf_local_filter_node":
   ros__parameters:
     two_d_mode: true
     publish_tf: true
@@ -43,7 +54,7 @@ ekf_local_filter_node:
 
 
 # -- Global EKF Filter (Map)
-ekf_global_filter_node:
+"**/ekf_global_filter_node":
   ros__parameters:
     two_d_mode: true
     publish_tf: true
@@ -78,7 +89,7 @@ ekf_global_filter_node:
 
 
 # -- Navsat Transform (GPS)
-navsat_transform_node:
+"**/navsat_transform_node":
     ros__parameters:
         frequency: 5.0
 
