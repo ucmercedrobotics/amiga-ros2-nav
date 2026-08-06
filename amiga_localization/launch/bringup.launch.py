@@ -11,13 +11,15 @@ def generate_launch_description():
     use_vectornav = LaunchConfiguration("use_vectornav")
     use_gps = LaunchConfiguration("use_gps")
     gps_topic = LaunchConfiguration("gps_topic")
+    namespace = LaunchConfiguration("namespace")
 
     launch_dir = os.path.join(
         get_package_share_directory("amiga_localization"), "launch"
     )
 
     wheel_odom_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, "wheel_odom.launch.py"))
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, "wheel_odom.launch.py")),
+        launch_arguments={"namespace": namespace}.items(),
     )
 
     ekf_launch = IncludeLaunchDescription(
@@ -26,6 +28,7 @@ def generate_launch_description():
             "use_vectornav": use_vectornav,
             "use_gps": use_gps,
             "gps_topic": gps_topic,
+            "namespace": namespace,
         }.items(),
     )
 
@@ -45,6 +48,11 @@ def generate_launch_description():
                 "gps_topic",
                 default_value="/ublox_gps_node/fix",
                 description="GPS fix topic to remap to /gps/fix",
+            ),
+            DeclareLaunchArgument(
+                "namespace",
+                default_value="",
+                description="ROS namespace for the whole localization stack (per-robot, e.g. 'amiga2')",
             ),
             wheel_odom_launch,
             ekf_launch,

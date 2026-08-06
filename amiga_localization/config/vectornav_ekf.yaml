@@ -5,8 +5,11 @@
 # TODO: Covariance Matrices
 # TODO: Acceleration/Deceleration Kinematics
 
+# Top-level keys use the quoted "**/<name>" wildcard (no leading slash) —
+# see base_ekf.yaml for why.
+
 # -- Local EKF Filter (Odom)
-ekf_local_filter_node:
+"**/ekf_local_filter_node":
   ros__parameters:
     two_d_mode: true
     publish_tf: true
@@ -43,7 +46,7 @@ ekf_local_filter_node:
 
 
 # -- Global EKF Filter (Map)
-ekf_global_filter_node:
+"**/ekf_global_filter_node":
   ros__parameters:
     two_d_mode: true
     publish_tf: true
@@ -78,7 +81,7 @@ ekf_global_filter_node:
 
 
 # -- Navsat Transform (GPS)
-navsat_transform_node:
+"**/navsat_transform_node":
     ros__parameters:
         frequency: 5.0
 
