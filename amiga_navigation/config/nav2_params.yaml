@@ -85,8 +85,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       rolling_window: true
-      width: 75
-      height: 75
+      width: 300
+      height: 300
       footprint: "[ [-0.57, 0.7], [0.57, 0.7], [0.57, -0.7], [-0.57, -0.7] ]"
       # no static map
       plugins: ["obstacle_layer", "inflation_layer"]
