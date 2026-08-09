@@ -28,6 +28,13 @@ ABSOLUTE_NAV2_TOPICS = [
     "/oak0/points",
 ]
 
+FRAME_ID_REWRITES = [
+    ("robot_base_frame: base_link", "robot_base_frame: {ns}/base_link"),
+    ('base_frame_id: "base_link"', 'base_frame_id: "{ns}/base_link"'),
+    ('odom_frame_id: "odom"', 'odom_frame_id: "{ns}/odom"'),
+    ("global_frame: odom", "global_frame: {ns}/odom"),
+]
+
 # Top-level keys in nav2_params.yaml, each naming a node. ROS 2's yaml-params
 # loader only applies a section to a node whose fully qualified name matches
 # the section's key (or a **/ wildcard) — a bare key like "controller_server"
@@ -54,6 +61,8 @@ def namespace_nav2_params(content: str, ns: str) -> str:
         return content
     for topic in ABSOLUTE_NAV2_TOPICS:
         content = content.replace(topic, f"/{ns}{topic}")
+    for old, new in FRAME_ID_REWRITES:
+        content = content.replace(old, new.format(ns=ns))
     for key in NAV2_PARAMS_TOP_LEVEL_KEYS:
         content = re.sub(rf"(?m)^{re.escape(key)}:", f'"**/{key}":', content)
     return content

@@ -40,6 +40,10 @@ class WheelOdometryNode(Node):
         self.last_time = self.get_clock().now()
         self.current_time = self.last_time
 
+        # -- Frame prefix
+        ns = self.get_namespace().strip("/")
+        self.frame_prefix = f"{ns}/" if ns else ""
+
         # -- Pub/Sub
         self.create_subscription(TwistStamped, "/canbus/twist", self.twist_callback, 10)
         self.wheel_odom_publisher = self.create_publisher(
@@ -83,8 +87,8 @@ class WheelOdometryNode(Node):
     def create_odom_msg(self) -> Odometry:
         msg = Odometry()
         msg.header.stamp = self.current_time.to_msg()
-        msg.header.frame_id = "odom"
-        msg.child_frame_id = "base_link"
+        msg.header.frame_id = f"{self.frame_prefix}odom"
+        msg.child_frame_id = f"{self.frame_prefix}base_link"
 
         msg.pose.pose.position.x = self.x
         msg.pose.pose.position.y = self.y
