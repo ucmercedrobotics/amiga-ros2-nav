@@ -71,11 +71,14 @@ def namespace_nav2_params(content: str, ns: str) -> str:
 def launch_setup(context, *args, **kwargs):
     use_sim_time = LaunchConfiguration("use_sim_time")
     ns = LaunchConfiguration("namespace").perform(context)
+    params_file = LaunchConfiguration("params_file").perform(context)
 
     nav2_bringup_dir = get_package_share_directory("nav2_bringup")
     amiga_navigation_dir = get_package_share_directory("amiga_navigation")
     params_dir = os.path.join(amiga_navigation_dir, "config")
-    nav2_params = os.path.join(params_dir, "nav2_params.yaml")
+    nav2_params = params_file if params_file else os.path.join(
+        params_dir, "nav2_params.yaml"
+    )
 
     if ns:
         with open(nav2_params) as f:
@@ -161,6 +164,13 @@ def generate_launch_description():
                 "namespace",
                 default_value="",
                 description="ROS namespace for the whole Nav2 stack (per-robot, e.g. 'amiga2')",
+            ),
+            DeclareLaunchArgument(
+                "params_file",
+                default_value="",
+                description="Absolute path to a nav2 params yaml to use instead of "
+                "amiga_navigation/config/nav2_params.yaml (e.g. a sim-only copy "
+                "with a larger collision footprint). Empty uses the default.",
             ),
             OpaqueFunction(function=launch_setup),
         ]
