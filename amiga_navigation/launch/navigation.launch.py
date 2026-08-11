@@ -28,6 +28,13 @@ ABSOLUTE_NAV2_TOPICS = [
     "/oak0/points",
 ]
 
+FRAME_ID_REWRITES = [
+    ("robot_base_frame: base_link", "robot_base_frame: {ns}/base_link"),
+    ('base_frame_id: "base_link"', 'base_frame_id: "{ns}/base_link"'),
+    ('odom_frame_id: "odom"', 'odom_frame_id: "{ns}/odom"'),
+    ("global_frame: odom", "global_frame: {ns}/odom"),
+]
+
 # Top-level keys in nav2_params.yaml, each naming a node. ROS 2's yaml-params
 # loader only applies a section to a node whose fully qualified name matches
 # the section's key (or a **/ wildcard) — a bare key like "controller_server"
@@ -54,6 +61,8 @@ def namespace_nav2_params(content: str, ns: str) -> str:
         return content
     for topic in ABSOLUTE_NAV2_TOPICS:
         content = content.replace(topic, f"/{ns}{topic}")
+    for old, new in FRAME_ID_REWRITES:
+        content = content.replace(old, new.format(ns=ns))
     for key in NAV2_PARAMS_TOP_LEVEL_KEYS:
         content = re.sub(rf"(?m)^{re.escape(key)}:", f'"**/{key}":', content)
     return content
@@ -62,11 +71,14 @@ def namespace_nav2_params(content: str, ns: str) -> str:
 def launch_setup(context, *args, **kwargs):
     use_sim_time = LaunchConfiguration("use_sim_time")
     ns = LaunchConfiguration("namespace").perform(context)
+    params_file = LaunchConfiguration("params_file").perform(context)
 
     nav2_bringup_dir = get_package_share_directory("nav2_bringup")
     amiga_navigation_dir = get_package_share_directory("amiga_navigation")
     params_dir = os.path.join(amiga_navigation_dir, "config")
-    nav2_params = os.path.join(params_dir, "nav2_params.yaml")
+    nav2_params = params_file if params_file else os.path.join(
+        params_dir, "nav2_params.yaml"
+    )
 
     if ns:
         with open(nav2_params) as f:
@@ -152,6 +164,13 @@ def generate_launch_description():
                 "namespace",
                 default_value="",
                 description="ROS namespace for the whole Nav2 stack (per-robot, e.g. 'amiga2')",
+            ),
+            DeclareLaunchArgument(
+                "params_file",
+                default_value="",
+                description="Absolute path to a nav2 params yaml to use instead of "
+                "amiga_navigation/config/nav2_params.yaml (e.g. a sim-only copy "
+                "with a larger collision footprint). Empty uses the default.",
             ),
             OpaqueFunction(function=launch_setup),
         ]

@@ -39,6 +39,9 @@ def launch_setup(context, *args, **kwargs):
         ("/vectornav/imu", qualify_ros(ns, "vectornav/imu")),
     ]
 
+    base_frame_overrides = {"base_link_frame": f"{ns}/base_link", "odom_frame": f"{ns}/odom"} if ns else {}
+    local_frame_overrides = {**base_frame_overrides, "world_frame": f"{ns}/odom"} if ns else {}
+
     return [
         Node(
             package="robot_localization",
@@ -46,7 +49,7 @@ def launch_setup(context, *args, **kwargs):
             name="ekf_local_filter_node",
             namespace=ns,
             output="screen",
-            parameters=[ekf_config_path],
+            parameters=[ekf_config_path, local_frame_overrides],
             remappings=[("odometry/filtered", "odometry/filtered/local")]
             + tf_remaps
             + imu_remaps,
@@ -57,7 +60,7 @@ def launch_setup(context, *args, **kwargs):
             name="ekf_global_filter_node",
             namespace=ns,
             output="screen",
-            parameters=[ekf_config_path],
+            parameters=[ekf_config_path, base_frame_overrides],
             remappings=[("odometry/filtered", "odometry/filtered/global")]
             + tf_remaps
             + imu_remaps,

@@ -39,7 +39,7 @@ class WaypointFollowerActionServer(Node):
         # for north facing IMU VectorNav
         self.declare_parameter("yaw_offset", math.pi/2)
         self.yaw_offset = self.get_parameter("yaw_offset").value
-        self.declare_parameter("orchard_tree_service", "/orchard/get_tree_info")
+        self.declare_parameter("orchard_tree_service", "orchard/get_tree_info")
         service_name = (
             self.get_parameter("orchard_tree_service").get_parameter_value().string_value
         )
@@ -50,14 +50,14 @@ class WaypointFollowerActionServer(Node):
 
         self._gps_sub = self.create_subscription(
             msg_type=NavSatFix,
-            topic="/gps/filtered",
+            topic="gps/filtered",
             callback=self.pose_cb,
             qos_profile=10,
         )
 
         self._robot_pose_sub = self.create_subscription(
             msg_type=Odometry,
-            topic="/odometry/filtered/local",
+            topic="odometry/filtered/local",
             callback=self.robot_pose_cb,
             qos_profile=1,
         )
@@ -95,7 +95,7 @@ class WaypointFollowerActionServer(Node):
         self._navigate_via_lidar_client = ActionClient(
             node=self,
             action_type=NavigateViaLidar,
-            action_name="/navigate_via_lidar"
+            action_name="navigate_via_lidar"
         )
 
     def pose_cb(self, msg):
