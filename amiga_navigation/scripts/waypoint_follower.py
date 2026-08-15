@@ -31,7 +31,7 @@ class WaypointFollowerActionServer(Node):
         robot gps position)
 
         """
-        super().__init__("waypoint_follower")
+        super().__init__("amiga_waypoint_follower")
 
         self.gps_position = []
         self.utm_position = []

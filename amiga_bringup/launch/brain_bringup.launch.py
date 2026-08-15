@@ -61,7 +61,7 @@ def generate_launch_description():
     waypoint_follower = Node(
         package="amiga_navigation",
         executable="waypoint_follower.py",
-        name="waypoint_follower",
+        name="amiga_waypoint_follower",
         output="screen",
     )
 
