@@ -9,7 +9,7 @@ import numpy as np
 import rclpy
 from rclpy.action import ActionServer, ActionClient
 from rclpy.node import Node
-from nav2_simple_commander.robot_navigator import BasicNavigator
+from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import NavSatFix
 from tf_transformations import euler_from_quaternion
@@ -382,6 +382,17 @@ class WaypointFollowerActionServer(Node):
                 goal_handle.publish_feedback(feedback_msg)
                 rclpy.spin_once(self, timeout_sec=0.5)
 
+            row_nav_outcome = self.navigator.getResult()
+            if row_nav_outcome != TaskResult.SUCCEEDED:
+                self.get_logger().error(
+                    f"Row waypoint navigation for tree {tree_id} finished with "
+                    f"{row_nav_outcome}; not attempting the tree approach"
+                )
+                goal_handle.abort()
+                result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+                result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+                return result
+
         if approach_tree:
             object_angle = 0.0
             if tree_utm is not None:
@@ -519,8 +530,19 @@ class WaypointFollowerActionServer(Node):
             goal_handle.publish_feedback(feedback_msg)
             rclpy.spin_once(self, timeout_sec=0.5)
 
+        aisle_nav_outcome = self.navigator.getResult()
+        if aisle_nav_outcome != TaskResult.SUCCEEDED:
+            self.get_logger().error(
+                f"Aisle head navigation for aisle {aisle_id} finished with "
+                f"{aisle_nav_outcome}"
+            )
+            goal_handle.abort()
+            result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
+            result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
+            return result
+
         goal_handle.succeed()
-        self.get_logger().info(f"Aisle head waypoint finished with: {self.navigator.getResult()}")
+        self.get_logger().info(f"Aisle head waypoint finished with: {aisle_nav_outcome}")
 
         result.lat = float(self.gps_position[0]) if self.gps_position else 0.0
         result.lon = float(self.gps_position[1]) if self.gps_position else 0.0
