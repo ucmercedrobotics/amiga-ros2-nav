@@ -135,6 +135,7 @@ void LidarObjectNavigator::execute(
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(pc, "z");
 
   std::vector<Eigen::Vector3f> selected_points;
+  size_t finite_returns = 0;
   float x, y, z;
 
   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
@@ -143,6 +144,7 @@ void LidarObjectNavigator::execute(
     z = *iter_z;
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
       continue;
+    ++finite_returns;
 
     // Transform point to base_link frame
     geometry_msgs::msg::PointStamped lidar_point, base_point;
@@ -169,10 +171,15 @@ void LidarObjectNavigator::execute(
   }
 
   if (selected_points.empty()) {
-    RCLCPP_WARN(this->get_logger(), "No points found at orientation %.2f rad", theta_target);
-    result->success = true;
-    result->message = "No points found";
-    goal_handle->succeed(result);
+    if (finite_returns == 0) {
+      RCLCPP_WARN(this->get_logger(), "Lidar didn't return anything");
+      result->message = "Lidar didn't return anything";
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Nothing found in the target area");
+      result->message = "Nothing found in the target area";
+    }
+    result->success = false;
+    goal_handle->abort(result);
     return;
   }
 
@@ -194,11 +201,10 @@ void LidarObjectNavigator::execute(
   }
 
   if (!found_point) {
-    RCLCPP_WARN(this->get_logger(), 
-                "No points found within maximum distance of %.2f m", max_object_distance_);
-    result->success = true;
-    result->message = "No points within range";
-    goal_handle->succeed(result);
+    RCLCPP_WARN(this->get_logger(), "Nothing found in the target area");
+    result->message = "Nothing found in the target area";
+    result->success = false;
+    goal_handle->abort(result);
     return;
   }
 
