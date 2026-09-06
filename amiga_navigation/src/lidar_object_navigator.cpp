@@ -175,8 +175,8 @@ void LidarObjectNavigator::execute(
       RCLCPP_WARN(this->get_logger(), "Lidar didn't return anything");
       result->message = "Lidar didn't return anything";
     } else {
-      RCLCPP_WARN(this->get_logger(), "Nothing found in the target area");
-      result->message = "Nothing found in the target area";
+      RCLCPP_WARN(this->get_logger(), "Received Lidar data but nothing found in the specified range");
+      result->message = "Received Lidar data but nothing found in the specified range";
     }
     result->success = false;
     goal_handle->abort(result);
@@ -201,8 +201,8 @@ void LidarObjectNavigator::execute(
   }
 
   if (!found_point) {
-    RCLCPP_WARN(this->get_logger(), "Nothing found in the target area");
-    result->message = "Nothing found in the target area";
+    RCLCPP_WARN(this->get_logger(), "Received Lidar data but nothing found in the specified range");
+    result->message = "Received Lidar data but nothing found in the specified range";
     result->success = false;
     goal_handle->abort(result);
     return;
